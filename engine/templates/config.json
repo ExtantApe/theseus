@@ -9,13 +9,15 @@
     "things_migration": false,
     "skylight": false,
     "clickup": false,
-    "slack_email_bridge": false
+    "slack_email_bridge": false,
+    "slack": false
   },
   "email_source": "connector",
   "email_accounts": [
     {
       "label": "Personal email",
-      "connector": "composio",
+      "service": "gmail",
+      "source": "composio",
       "account": "you@example.com"
     }
   ],
@@ -25,6 +27,7 @@
   "default_calendar": "Calendar",
   "family_calendar": "",
   "calendar_routes": {},
+  "slack_source": "off",
   "schedule": {
     "style": "regimented",
     "groups": [
@@ -83,5 +86,31 @@
     "#Home"
   ],
   "slack_digest_folder": "Theseus/Slack Digest",
-  "alarms_file": "theseus-alarms.txt"
+  "alarms_file": "theseus-alarms.txt",
+  "checkin_offers": {
+    "enabled": true,
+    "unranked": 5,
+    "inbox": 3,
+    "texts_waiting_days": 2,
+    "texts_waiting": 3,
+    "did_you_already": 3,
+    "stale_items": 5,
+    "review_days": 8,
+    "waiting_on_days": 7,
+    "disabled_triggers": []
+  },
+  "repeating_tasks_in_master": true,
+  "lists_outside_master": [],
+  "extra_sections": [],
+  "chore_reminder_sync": false,
+  "grocery_store_sections": {},
+  "channel": {
+    "enabled": false,
+    "plugin": "imessage@claude-plugins-official",
+    "restart_hour": 4
+  },
+  "remote_control": {
+    "enabled": true,
+    "name": "Theseus"
+  }
 }

@@ -131,6 +131,28 @@ Without a hint, Theseus decides from context. A note *titled* "NOW" or "Work" ap
 **From your phone:** start a Claude Code channel (e.g. the iMessage channel) **from your Theseus folder**, then text yourself
 "status", "add …", or "what's next? 30 min".
 
+## 6a. Reach Theseus from anywhere (on by default)
+`install.sh --schedule` also keeps Claude Code's **Remote Control** server running in your Theseus folder (restarted automatically after a
+crash, reboot or `--update`). Then:
+1. On your phone, open the **Claude app → Code**. Your Mac shows up as a device (named "Theseus" by default; `remote_control.name` in config.json).
+2. Tap it, pick your Theseus folder, and start a session. Each new session loads the latest rules, so start fresh rather than continuing an old chat.
+3. Talk to it like normal: "status", "what's next, 20 min", "add …".
+- Same on any computer at claude.ai/code.
+- The Mac needs to be awake and online (see "Keep the Mac awake"). If it isn't, your 📌 Today and ★ Master List notes still work on the phone.
+- Turn it off: set `"remote_control": {"enabled": false}` and run `engine/install.sh --unschedule`, then `--schedule` again. Logs: `logs/remote-control.log`.
+- Needs a recent Claude Code (Remote Control server mode). If it fails, update Claude Code first.
+
+## 6b. Text Theseus from your phone (optional)
+Text yourself "status", "what's next, 20 min" or "add call the vet Friday", and Theseus answers in the same self-chat.
+1. Install [Bun](https://bun.sh) (the channel plugin needs it): `curl -fsSL https://bun.sh/install | bash`
+2. `bash ~/Theseus/engine/install.sh --channel`. It asks first, installs the official iMessage channel plugin, and keeps a Claude Code session
+   running in your workspace while the Mac is awake (restarting after a crash or reboot, and once a day so it picks up rule updates).
+3. Text yourself "status".
+- It replies **only in your own self-chat**, never to anyone else. Add every number or email you text yourself from to `my_handles`.
+- If it needs a permission it doesn't have, it tells you to approve it at the Mac. It doesn't skip permissions.
+- Channels are a research preview in Claude Code. If it stops working after an update, Theseus notes it in your Today note.
+- Remove it: `bash ~/Theseus/engine/install.sh --unschedule`. Logs: `~/Theseus/logs/channel.log`.
+
 ## 7. Is all my message history here?
 1. iPhone → Settings → [your name] → iCloud → **Messages** shows how many messages are in iCloud (Mac: System Settings → [name] → iCloud → Messages).
 2. `/sync-check <that number>` compares it with this Mac, and shows messages per year, empty months, and how far back your biggest conversations go.
@@ -145,7 +167,16 @@ If history looks incomplete, try these in order:
 
 There's no official way to see an "undownloaded" count. Comparing the two counts is the most reliable signal.
 
-## 8. Slack without giving Theseus Slack access (email bridge)
+## 8. Slack
+**Option A: the official Slack connector** (Theseus reads Slack directly, with Claude Code's normal sign-in):
+```bash
+claude mcp add --transport http --scope user slack https://mcp.slack.com/mcp
+```
+Then run `/mcp` in Claude Code and sign in with Slack. Your workspace admin may need to approve the Slack MCP integration. Set `integrations.slack`
+true and `slack_source` "mcp". Theseus only reads; it never posts, reacts or edits.
+
+**Option B: the email bridge** (no Slack access). `/theseus:setup` asks which email provider receives your Slack notifications and gives you that
+provider's exact filter or rule. The general steps:
 1. **Slack** → Preferences → Notifications → *When I'm not active on desktop* → **Send me email notifications for mentions and
    direct messages**, every 15 minutes. Add keywords for the projects you care about. Turn off Slack's marketing emails.
 2. **Folder and rule:** create a `Theseus/Slack Digest` folder (Outlook) or label (Gmail). Add a server-side rule or filter: from Slack's

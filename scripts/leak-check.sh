@@ -12,13 +12,17 @@ else
   FILES=$(git ls-files 2>/dev/null || find . -type f -not -path './.git/*')
   [[ -n "$FILES" ]] || FILES=$(find . -type f -not -path './.git/*')
 fi
-FILES=$(echo "$FILES" | grep -v -E '(^|/)scripts/leak-check\.sh$' || true)
+FILES=$(echo "$FILES" | grep -v -E '(^|/)scripts/leak-(check\.sh|allow\.txt)$' || true)
+ALLOW="$ROOT/scripts/leak-allow.txt"
+allowed() {   # drop hit lines that contain an allow-listed public phrase
+  if [[ -f "$ALLOW" ]]; then grep -v -F -f <(grep -v -E '^\s*(#|$)' "$ALLOW") || true; else cat; fi
+}
 [[ -n "$FILES" ]] || { echo "leak-check: nothing to scan"; exit 0; }
 fail=0
 if [[ -f "$TERMS" ]]; then
   while IFS= read -r term; do
     [[ -z "$term" || "$term" == \#* ]] && continue
-    hits=$(echo "$FILES" | xargs grep -n -i -w -F -- "$term" 2>/dev/null || true)
+    hits=$(echo "$FILES" | xargs grep -n -i -w -F -- "$term" 2>/dev/null | allowed || true)
     if [[ -n "$hits" ]]; then echo "❌ private term found: '$term'"; echo "$hits" | head -5; fail=1; fi
   done < "$TERMS"
 else

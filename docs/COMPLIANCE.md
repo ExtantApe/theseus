@@ -11,6 +11,8 @@ Theseus is designed around these assumptions. Each one cites the rule it depends
 | A4 | Name and branding: "Theseus" contains no Anthropic marks. Text may say it "works with Claude Code" in plain words, plus a non-affiliation notice. No Anthropic or Claude logos. | Legal and compliance → name and logo; Trademark Guidelines: https://www.anthropic.com/legal/trademark-guidelines |
 | A5 | Uses stay within Anthropic's Usage Policy: personal productivity, never sends messages as the user, no impersonation, no surveillance of others, privacy-protective handling of third parties' messages. | Usage Policy: https://www.anthropic.com/legal/aup |
 | A6 | Free, MIT-licensed, no resale of Claude access, no paid tier. | Consumer Terms: https://www.anthropic.com/legal/consumer-terms ; Commercial Terms: https://www.anthropic.com/legal/commercial-terms |
+| A9 | Phone access uses Claude Code's own Remote Control feature on the user's own machine and account. Theseus only keeps it running. | Claude Code docs → Remote Control |
+| A8 | The optional iMessage channel uses Claude Code's official channels feature and plugin (a research preview), on the user's own plan, replying only in their own self-chat. Flags or allowlist behavior may change, so re-check them monthly. | Claude Code docs → Channels |
 | A7 | Plugin distribution through a GitHub marketplace, following Claude Code's plugin rules. | Claude Code docs → Plugins / Plugin marketplaces |
 
 Third-party services follow their own terms (Composio, ClickUp, Skylight's unofficial API, Slack, Apple). The monthly check flags

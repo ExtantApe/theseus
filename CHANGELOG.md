@@ -1,6 +1,24 @@
 # Changelog
 
 ## Unreleased
+- README: "Lightly opinionated": a fresh install starts blank and learns the person; the only fixed requirement is a Mac that stays on.
+- **Always reachable**: `--schedule` now also keeps a Claude Code **Remote Control** server running in the workspace (`remote_control`, on by
+  default; `--remote` installs it alone). The Mac appears in the Claude app's Code tab, so a fresh Theseus session can be started from anywhere.
+  It restarts after crashes, reboots and `--update`, and nightly and morning health checks flag it in the Today note if it's down.
+- **Text Theseus from your phone** (optional): `engine/install.sh --channel` keeps an iMessage channel session running in the workspace
+  (official plugin; self-chat only; restarts after crashes and daily for new rules; removed by `--unschedule`). Setup step, docs §6b, compliance A8.
+- `repeating_tasks_in_master` (default true): set false to keep repeating Reminders out of the master list; they still show under ⏰ when due.
+  `lists_outside_master` keeps whole Reminders lists out.
+- `extra_sections`: add your own master list sections (e.g. 💬 COMMUNICATIONS after NOW). Existing unknown sections are never dropped.
+- Groceries by store (`grocery_reminders_list` as a list, mapped to Skylight sections), optional chore ⇄ Reminder sync (`chore_reminder_sync`,
+  `data/chore-map.json`), and a rule for changing a chore's schedule without erasing its history.
+- **Backlog check-in offers** (RULES §7d): one optional, timed "Got 5 minutes?" offer when a backlog builds up, at natural moments only,
+  with yes / later / not today / never answers, and learning when the user likes to tidy. Thresholds in `config.checkin_offers`.
+- **README rewritten**: who it's for, how it tailors itself, bubble-sort ranking up front, every command, how to start, roadmap, and an
+  integrations table with one service per line (email and calendar listed separately per provider), with links and support status.
+- **MCP vs Composio** explained: use either, or both, per service. Email and calendar accounts each carry their own `source`.
+- **Slack, two ways**: the official Slack MCP connector (Claude Code sign-in, read-only use) or the email bridge. Setup asks which provider gets
+  the notifications and gives step-by-step filters for Gmail/Google Workspace, Outlook/Microsoft 365 and iCloud.
 - **Repeating reminders**: `ek add-reminder` and `ek update` take `--recur "<RRULE>"`, `ek update` takes `--clear-recur`, and reminder output
   includes `recurrence`.
 - Repeating tasks in the rules: one repeating Reminder plus one `↻` master item; completing an occurrence keeps the item and advances its due date

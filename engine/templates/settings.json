@@ -21,7 +21,9 @@
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:www.anthropic.com)",
       "WebFetch(domain:support.claude.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(launchctl print:*)",
+      "Bash(pgrep:*)"
     ],
     "ask": [
       "Bash(bin/ek delete:*)",

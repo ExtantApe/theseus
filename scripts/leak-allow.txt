@@ -1,0 +1,4 @@
+# Exact public phrases the leak check allows even when they contain a private term (one per line).
+# A line in a file is skipped only if it contains one of these phrases. Keep this list short and public-only.
+github.com/mgilardi/theseus
+mgilardi/theseus

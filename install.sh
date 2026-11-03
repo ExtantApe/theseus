@@ -5,7 +5,9 @@
 #                              install and --update stop if pending local changes aren't in this source; add --force to overwrite them
 #   ./install.sh --check       just run the access checks
 #   ./install.sh --schedule    install the nightly and morning jobs (and hourly sync if enabled)
-#   ./install.sh --unschedule  remove the scheduled jobs
+#   ./install.sh --remote      keep a Remote Control server running (reach Theseus from the Claude app; part of --schedule by default)
+#   ./install.sh --channel     keep an iMessage channel session running (text Theseus from your phone; opt-in)
+#   ./install.sh --unschedule  remove the scheduled jobs (and the channel session)
 # Workspace location: set THESEUS_HOME to change it.
 set -e
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +21,7 @@ if [[ $ON_MAC == 0 && -z "${THESEUS_SKIP_MAC:-}" ]]; then echo "Theseus runs on 
 
 uid() { id -u; }
 if [[ "$MODE" == "--unschedule" ]]; then
-  for j in morning nightly sync check; do
+  for j in morning nightly sync check channel remote; do
     p="$HOME/Library/LaunchAgents/com.theseus.$j.plist"
     launchctl bootout "gui/$(uid)" "$p" 2>/dev/null || true; rm -f "$p"
   done
@@ -104,15 +106,69 @@ for name, when in jobs.items():
     print(f"Scheduled {name}: " + ((f"{when[0]['Hour']:02d}:{when[0]['Minute']:02d} daily" if len(when) == 1 else "varies by day: " + ", ".join(f"{'Sun Mon Tue Wed Thu Fri Sat'.split()[e['Weekday']]} {e['Hour']:02d}:{e['Minute']:02d}" for e in when)) if when else
           f"local check every {interval//60} min; Claude at most every {chk.get('min_minutes_between_claude_runs', 15)} min, only when something changed"))
 PY
+  if [[ "$(python3 -c "import json;print('yes' if (json.load(open('$WS/config.json')).get('remote_control') or {}).get('enabled', True) else 'no')")" == yes ]]; then
+    remote
+  fi
   echo "Keep the Mac awake for these (System Settings → Energy, or: sudo pmset repeat wakeorpoweron MTWRFSU <5 min before morning_time>)."
+}
+
+remote() {
+  [[ $ON_MAC == 1 ]] || { echo "Remote Control needs macOS."; exit 1; }
+  CLAUDE_BIN="$(command -v claude || true)"; [[ -n "$CLAUDE_BIN" ]] || { echo "Can't find 'claude' on PATH"; exit 1; }
+  sed -e "s#__CLAUDE_BIN__#$CLAUDE_BIN#" "$WS/engine/scheduled/run-remote.sh" > "$WS/bin/run-remote.sh" && chmod +x "$WS/bin/run-remote.sh"
+  python3 - "$WS" <<'PY'
+import sys, plistlib, pathlib, subprocess, os, json
+ws = pathlib.Path(sys.argv[1]); label = "com.theseus.remote"
+p = pathlib.Path.home() / "Library/LaunchAgents" / f"{label}.plist"; p.parent.mkdir(parents=True, exist_ok=True)
+plistlib.dump({"Label": label, "ProgramArguments": ["/bin/bash", str(ws / "bin/run-remote.sh")],
+               "EnvironmentVariables": {"THESEUS_HOME": str(ws)}, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 60,
+               "StandardOutPath": str(ws / "logs/launchd-remote.log"), "StandardErrorPath": str(ws / "logs/launchd-remote.log")}, p.open("wb"))
+subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(p)], capture_output=True)
+subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(p)], check=True)
+name = (json.loads((ws / "config.json").read_text()).get("remote_control") or {}).get("name", "Theseus")
+print(f'Remote Control running: open the Claude app → Code → your Mac ("{name}"), pick the Theseus folder, and start a session.')
+PY
+}
+
+channel() {
+  [[ $ON_MAC == 1 ]] || { echo "The channel needs macOS."; exit 1; }
+  CLAUDE_BIN="$(command -v claude || true)"; [[ -n "$CLAUDE_BIN" ]] || { echo "Can't find 'claude' on PATH"; exit 1; }
+  command -v bun >/dev/null || { echo "The iMessage channel plugin needs Bun: curl -fsSL https://bun.sh/install | bash   (then re-run)"; exit 1; }
+  echo "This keeps a Claude Code session running in $WS while your Mac is awake, so you can text yourself to reach Theseus."
+  echo "It replies only in your own self-chat. Remove it anytime with: engine/install.sh --unschedule"
+  read -r -p "Install it? [y/N] " ok; [[ "$ok" == [yY]* ]] || { echo "Not installed."; exit 0; }
+  "$CLAUDE_BIN" plugin install "$(python3 -c "import json;print((json.load(open('$WS/config.json')).get('channel') or {}).get('plugin','imessage@claude-plugins-official'))")" || true
+  python3 - "$WS" <<'PY'
+import json, sys, pathlib
+p = pathlib.Path(sys.argv[1]) / "config.json"; c = json.loads(p.read_text())
+c.setdefault("channel", {})["enabled"] = True; p.write_text(json.dumps(c, indent=2, ensure_ascii=False))
+PY
+  sed -e "s#__CLAUDE_BIN__#$CLAUDE_BIN#" "$WS/engine/scheduled/run-channel.sh" > "$WS/bin/run-channel.sh" && chmod +x "$WS/bin/run-channel.sh"
+  python3 - "$WS" <<'PY'
+import sys, plistlib, pathlib, subprocess, os
+ws = pathlib.Path(sys.argv[1]); label = "com.theseus.channel"
+p = pathlib.Path.home() / "Library/LaunchAgents" / f"{label}.plist"; p.parent.mkdir(parents=True, exist_ok=True)
+plistlib.dump({"Label": label, "ProgramArguments": ["/bin/bash", str(ws / "bin/run-channel.sh")],
+               "EnvironmentVariables": {"THESEUS_HOME": str(ws)}, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 60,
+               "StandardOutPath": str(ws / "logs/launchd-channel.log"), "StandardErrorPath": str(ws / "logs/launchd-channel.log")}, p.open("wb"))
+subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(p)], capture_output=True)
+subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(p)], check=True)
+print("Channel session running. Text yourself \"status\" to try it. Log: logs/channel.log")
+PY
 }
 
 case "$MODE" in
   install)    copy_engine; build_ek; checks || true
               echo; echo "✅ Theseus installed at $WS"
               echo "Next: cd \"$WS\" && claude   then run /theseus:setup (plugin) or follow docs/SETUP.md, then /migrate" ;;
-  --update)   copy_engine; build_ek; echo "✅ Engine updated. Your profile, config and data were not touched." ;;
+  --update)   copy_engine; build_ek
+              if [[ $ON_MAC == 1 && -f "$HOME/Library/LaunchAgents/com.theseus.remote.plist" ]]; then
+                launchctl kickstart -k "gui/$(id -u)/com.theseus.remote" 2>/dev/null && echo "Restarted Remote Control so it uses the new engine."
+              fi
+              echo "✅ Engine updated. Your profile, config and data were not touched." ;;
   --check)    checks ;;
   --schedule) schedule ;;
+  --channel)  channel ;;
+  --remote)   remote ;;
   *) echo "Unknown option $MODE"; exit 2 ;;
 esac
