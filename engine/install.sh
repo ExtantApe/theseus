@@ -10,10 +10,10 @@
 set -e
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; [[ -d "$SRC/engine" ]] || SRC="$(dirname "$SRC")"
 WS="${THESEUS_HOME:-$HOME/Theseus}"
-MODE="${1:-install}"
-FORCE=0
-[[ "${2:-}" == "--force" ]] && FORCE=1
-if [[ "$MODE" == "--force" ]]; then MODE=install; FORCE=1; fi
+MODE=install; FORCE=0
+for arg in "$@"; do                      # flags in any order: --update --force == --force --update
+  if [[ "$arg" == "--force" ]]; then FORCE=1; else MODE="$arg"; fi
+done
 ON_MAC=1; [[ "$(uname)" == "Darwin" ]] || ON_MAC=0
 if [[ $ON_MAC == 0 && -z "${THESEUS_SKIP_MAC:-}" ]]; then echo "Theseus runs on macOS only."; exit 1; fi
 

@@ -113,6 +113,7 @@ bash ~/Theseus/engine/install.sh --schedule
 |---|---|
 | `/status` | full fresh re-run of everything, any time |
 | `/add call the bank Friday 10am` | dictate anything; Theseus places it |
+| `/add water the plants every other Saturday` | a repeating task: one Reminder that repeats, plus one ↻ item on your list |
 | a note in your Notes inbox folder | ingested on the next run, then moved to Processed |
 | `/next finished all except X, waiting on Alex, 45 min` (or plain words) | checks things off, parks X with the reason, picks what fits your time |
 | `/texts` → "sprint" | who's waiting on a reply; knock out the easy ones |
@@ -176,6 +177,15 @@ Alarms don't sync between devices, so your iPhone saves its alarm list to iCloud
 Turn on `integrations.iphone_alarms`. **Apple Watch alarms never leave the watch.** Tell Theseus their times
 ("my watch alarm is 5:30 weekdays") and they're stored in `data/alarms-static.md`.
 For tasks, say **"Hey Siri, remind me at 3 to…"** instead of setting an alarm. Reminders sync everywhere, and Theseus picks them up.
+
+## 10a. For contributors: changes made from a workspace
+Theseus can improve its own engine while it works in your workspace (`~/Theseus/engine`), for example a fix it needed right away. Every such
+change, applied or only recommended, is logged in `~/Theseus/data/local-changes.md` (with a patch in `data/local-changes/` for applied
+ones), so nothing is lost:
+- Opening Claude Code in the source repo lists pending entries at session start (a SessionStart hook in the repo's `.claude/settings.json`).
+- `install.sh` and `install.sh --update` refuse to run if a pending patch isn't in the source yet, so an update can't silently undo it.
+  Apply the patch to the repo (or decide against it), move the entry to "Done upstream", then update. `--force` overrides.
+- Theseus never edits the source repo or pushes without your yes.
 
 ## 10. What Theseus can and can't do
 | ✅ Can | 🚫 Never |

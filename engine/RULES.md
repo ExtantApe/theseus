@@ -100,7 +100,7 @@ Item format (one line, middle-dot separated, id last):
 ```
 - `#Category`: from `data/categories.md` only. If nothing fits, use `#Inbox` and ask.
 - `due …`: real deadlines only. Never invent dates. `~15m` is a size estimate (mark guesses).
-- `⏰`: a Reminder exists. `🏠`: mirrored to Skylight. `↗ClickUp`: the real task lives in ClickUp.
+- `⏰`: a Reminder exists. `↻ every other Fri`: it repeats (rule in plain words). `🏠`: mirrored to Skylight. `↗ClickUp`: the real task lives in ClickUp.
 - `id:tNNNN`: permanent. Next number is in `data/state.json → next_task_id`. Ids are hidden in the phone view.
 - Within each section, **order = priority** (top is most important). Re-rank on every status run using
   `data/priorities.md`.
@@ -108,6 +108,21 @@ Item format (one line, middle-dot separated, id last):
 When to create a **Reminder** (keep Reminders lean): a specific time/date nudge is needed, the user
 says "remind me", it's location-based, or a deadline is within ~48h and they'd want a phone ping.
 Everything else lives only in the master list.
+
+**Repeating tasks.** "Every Monday", "every other Friday", "first Wednesday of the month", "monthly on the 15th", "every 3 days"
+→ one Reminder that repeats (`bin/ek add-reminder … --due <first occurrence> --recur "<RRULE>"`; a repeat needs a due date), plus ONE
+master item marked `↻ <rule in plain words>`. Never create a separate item per occurrence. Translate carefully and confirm the rule
+back in plain words the first time ("Every other Friday starting Nov 7. Right?"):
+| They say | RRULE |
+|---|---|
+| every day / weekdays | `FREQ=DAILY` / `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` |
+| every Monday | `FREQ=WEEKLY;BYDAY=MO` |
+| every other Friday | `FREQ=WEEKLY;INTERVAL=2;BYDAY=FR` |
+| first Wednesday of the month | `FREQ=MONTHLY;BYDAY=1WE` |
+| last weekday of the month | `FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` |
+| monthly (same date as the due date) | `FREQ=MONTHLY` |
+| every 3 months / yearly | `FREQ=MONTHLY;INTERVAL=3` / `FREQ=YEARLY` |
+To change a repeat: `bin/ek update --id … --recur "<RRULE>"`. To stop one: `--clear-recur` (ask first). Reminder output shows the rule in `recurrence`.
 
 ---------------------------------------------------------------------------
 ## 3. Sync rules (every `/status`, `/sync`, `/inbox`, `/morning`, `/nightly`)
@@ -118,7 +133,11 @@ Everything else lives only in the master list.
 1. **Pull** whatever is enabled: Reminders (incomplete, plus completed since `last_sync`), Skylight to-do
    and grocery lists plus chores for today through 7 days out, ClickUp tasks assigned to the user
    (due ≤ 14 days or overdue), and the Notes inbox.
-2. **Done anywhere = done everywhere.** Completed in any linked system → complete it in the others and move it to ✅ DONE.
+2. **Done anywhere = done everywhere**, except repeating items: completed in any linked system → complete it in the others and move it to ✅ DONE.
+   **Repeating (`↻`) items are never moved to DONE by one completion.** Completing one occurrence (in Reminders, in the Today note, or by
+   saying so) means "done for this time": complete the Reminder occurrence (Reminders then advances to the next date), keep the master item where it is
+   with its new due date (re-read it via `ek reminders`), and add a one-line DONE entry `✓ <title> (Nov 7)`. Auto-detected evidence follows
+   the same rule. Only "stop this", "no longer needed" or "cancel the repeat" ends it: `--clear-recur`, then complete, then DONE.
 3. **New elsewhere → master.** A new Reminder (e.g. made with Siri) gets added with ⏰, categorized
    and ranked; don't change the Reminder itself. A new Skylight to-do gets added as `#Home` (or best fit) with 🏠.
 4. **Master → elsewhere.** Categories listed in `skylight_todo_categories` get mirrored to the Skylight to-do list.

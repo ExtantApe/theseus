@@ -131,7 +131,7 @@ func reminderDict(_ r: EKReminder) -> [String: Any] {
             "completed_at": iso(r.completionDate), "created": iso(r.creationDate),
             "modified": iso(r.lastModifiedDate), "url": nn(r.url?.absoluteString),
             "recurring": r.hasRecurrenceRules,
-            "recurrence": r.recurrenceRules?.first.map { String(describing: $0).components(separatedBy: "RRULE ").last ?? "" } ?? "",
+            "recurrence": r.recurrenceRules?.first.map(rruleString) ?? "",
             "alarms": (r.alarms ?? []).map { a in a.absoluteDate.map { isoOut.string(from: $0) } ?? "relative \(Int(a.relativeOffset / 60))m" }]
 }
 func fetchReminders(_ pred: NSPredicate) -> [EKReminder] {
@@ -153,6 +153,22 @@ func setDue(_ r: EKReminder, _ s: String) {
     r.alarms?.forEach { r.removeAlarm($0) }
     if hasTime { r.addAlarm(EKAlarm(absoluteDate: d)) }   // makes the phone actually notify
 }
+// Builds an RRULE string from the rule's own fields (stable across macOS versions).
+func rruleString(_ rule: EKRecurrenceRule) -> String {
+    let freqs: [EKRecurrenceFrequency: String] = [.daily: "DAILY", .weekly: "WEEKLY", .monthly: "MONTHLY", .yearly: "YEARLY"]
+    let codes: [EKWeekday: String] = [.sunday: "SU", .monday: "MO", .tuesday: "TU", .wednesday: "WE",
+                                      .thursday: "TH", .friday: "FR", .saturday: "SA"]
+    var parts = ["FREQ=\(freqs[rule.frequency] ?? "DAILY")"]
+    if rule.interval > 1 { parts.append("INTERVAL=\(rule.interval)") }
+    if let days = rule.daysOfTheWeek, !days.isEmpty {
+        parts.append("BYDAY=" + days.map { d in (d.weekNumber != 0 ? "\(d.weekNumber)" : "") + (codes[d.dayOfTheWeek] ?? "") }.joined(separator: ","))
+    }
+    if let pos = rule.setPositions, !pos.isEmpty { parts.append("BYSETPOS=" + pos.map { "\($0)" }.joined(separator: ",")) }
+    if let end = rule.recurrenceEnd {
+        if let d = end.endDate { parts.append("UNTIL=" + isoOut.string(from: d)) } else if end.occurrenceCount > 0 { parts.append("COUNT=\(end.occurrenceCount)") }
+    }
+    return parts.joined(separator: ";")
+}
 // Parses the small RRULE subset used for reminders: FREQ, INTERVAL, BYDAY (MO or 1WE), BYSETPOS.
 func parseRecur(_ s: String) -> EKRecurrenceRule {
     var parts: [String: String] = [:]
@@ -173,7 +189,7 @@ func parseRecur(_ s: String) -> EKRecurrenceRule {
             return EKRecurrenceDayOfWeek(wd)
         }
     }
-    let positions = parts["BYSETPOS"].map { $0.split(separator: ",").compactMap { Int($0) as NSNumber? } }
+    let positions: [NSNumber]? = parts["BYSETPOS"].map { $0.split(separator: ",").compactMap { Int($0) }.map { NSNumber(value: $0) } }
     return EKRecurrenceRule(recurrenceWith: freq, interval: Int(parts["INTERVAL"] ?? "1") ?? 1,
                             daysOfTheWeek: days, daysOfTheMonth: nil, monthsOfTheYear: nil,
                             weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: positions, end: nil)

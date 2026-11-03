@@ -3,6 +3,11 @@
 ## Unreleased
 - **Repeating reminders**: `ek add-reminder` and `ek update` take `--recur "<RRULE>"`, `ek update` takes `--clear-recur`, and reminder output
   includes `recurrence`.
+- Repeating tasks in the rules: one repeating Reminder plus one `↻` master item; completing an occurrence keeps the item and advances its due date
+  instead of moving it to DONE. A plain-language → RRULE table, and a confirmation the first time.
+- `recurrence` in reminder output is now built from the rule's own fields (stable across macOS versions); safer BYSETPOS parsing.
+- `install.sh` flags work in any order (`--force --update` == `--update --force`).
+- docs/SETUP.md §10a explains the local-changes handoff for contributors.
 - **Local changes handoff**: `data/local-changes.md` records engine changes made or recommended in a workspace (`engine/tools/local_changes.py`).
   A SessionStart hook in this repo lists pending entries, and `install` and `--update` stop if a pending patch isn't in the source (`--force` overrides).
 
