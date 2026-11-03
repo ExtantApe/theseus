@@ -1,0 +1,87 @@
+{
+  "integrations": {
+    "texts": true,
+    "reminders": true,
+    "calendar": true,
+    "email": true,
+    "notes": true,
+    "iphone_alarms": false,
+    "things_migration": false,
+    "skylight": false,
+    "clickup": false,
+    "slack_email_bridge": false
+  },
+  "email_source": "connector",
+  "email_accounts": [
+    {
+      "label": "Personal email",
+      "connector": "composio",
+      "account": "you@example.com"
+    }
+  ],
+  "mail_account_labels": {},
+  "calendar_source": "apple",
+  "calendar_accounts": [],
+  "default_calendar": "Calendar",
+  "family_calendar": "",
+  "calendar_routes": {},
+  "schedule": {
+    "style": "regimented",
+    "groups": [
+      {
+        "name": "Weekdays",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ],
+        "wake": "07:00",
+        "bed": "23:00"
+      },
+      {
+        "name": "Weekends",
+        "days": [
+          "sat",
+          "sun"
+        ],
+        "wake": "08:30",
+        "bed": "00:00"
+      }
+    ],
+    "overrides": {},
+    "flex_hours": 1,
+    "morning_offset_minutes": -10,
+    "nightly_offset_minutes": -150,
+    "adapt": true
+  },
+  "checks": {
+    "enabled": false,
+    "every_minutes": 5,
+    "min_minutes_between_claude_runs": 15,
+    "only_while_awake": true,
+    "skip_if_nothing_changed": true,
+    "full_refresh_every_minutes": 60
+  },
+  "ensure_apps": [],
+  "my_handles": [],
+  "contact_overrides": {},
+  "ignore_handles": [],
+  "missed_days": 7,
+  "notes_account": "iCloud",
+  "notes_inbox_folder": "Theseus",
+  "notes_processed_subfolder": "Processed",
+  "master_note_title": "★ Master List",
+  "master_note_folder": "Notes",
+  "today_note_title": "📌 Today",
+  "default_reminders_list": "Reminders",
+  "grocery_reminders_list": "Groceries",
+  "skylight_todo_list": "To Do",
+  "skylight_grocery_list": "Grocery",
+  "skylight_todo_categories": [
+    "#Home"
+  ],
+  "slack_digest_folder": "Theseus/Slack Digest",
+  "alarms_file": "theseus-alarms.txt"
+}

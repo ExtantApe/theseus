@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 engine/tools/imsg.py:*)",
+      "Bash(python3 engine/tools/mail.py:*)",
+      "Bash(python3 engine/tools/notes.py:*)",
+      "Bash(python3 engine/tools/alarms.py:*)",
+      "Bash(python3 engine/tools/things_export.py:*)",
+      "Bash(bin/ek:*)",
+      "Read",
+      "Edit(data/**)",
+      "Edit(exports/**)",
+      "Edit(briefings/**)",
+      "Edit(profile.md)",
+      "Edit(config.json)",
+      "Write(data/**)",
+      "Write(exports/**)",
+      "Write(briefings/**)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:support.claude.com)",
+      "WebSearch"
+    ],
+    "ask": [
+      "Bash(bin/ek delete:*)",
+      "Edit(engine/**)",
+      "Edit(CLAUDE.md)"
+    ],
+    "deny": [
+      "Bash(osascript:*)",
+      "Bash(shortcuts run:*)",
+      "Bash(sqlite3 ~/Library/Messages:*)",
+      "Edit(~/Library/Messages/**)",
+      "Write(~/Library/Messages/**)",
+      "Edit(~/Library/Mail/**)",
+      "Write(~/Library/Mail/**)"
+    ]
+  }
+}

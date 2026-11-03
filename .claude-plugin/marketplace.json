@@ -1,0 +1,11 @@
+{
+  "name": "theseus",
+  "owner": { "name": "Theseus contributors" },
+  "plugins": [
+    {
+      "name": "theseus",
+      "source": "./",
+      "description": "A private, never-sends personal assistant for Claude Code on macOS."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+node_modules/
+dist/
+target/
+*.log
+# never commit personal data
+profile.md
+config.json
+!engine/templates/config.json
+!engine/templates/profile.md
