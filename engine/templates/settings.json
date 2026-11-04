@@ -13,9 +13,6 @@
       "Edit(briefings/**)",
       "Edit(profile.md)",
       "Edit(config.json)",
-      "Write(data/**)",
-      "Write(exports/**)",
-      "Write(briefings/**)",
       "WebFetch(domain:code.claude.com)",
       "WebFetch(domain:docs.claude.com)",
       "WebFetch(domain:docs.anthropic.com)",
@@ -35,9 +32,7 @@
       "Bash(shortcuts run:*)",
       "Bash(sqlite3 ~/Library/Messages:*)",
       "Edit(~/Library/Messages/**)",
-      "Write(~/Library/Messages/**)",
-      "Edit(~/Library/Mail/**)",
-      "Write(~/Library/Mail/**)"
+      "Edit(~/Library/Mail/**)"
     ]
   }
 }

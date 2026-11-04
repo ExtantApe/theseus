@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- `--schedule` now also (1) allows your connected MCP servers in scheduled runs via `.claude/settings.local.json` (Slack excluded, since it can
+  post), and (2) runs `--grant`: a one-off background job that makes macOS ask for Calendar, Reminders and Notes access *for the background jobs*,
+  which don't inherit Terminal's permissions. Removed invalid `Write(...)` permission rules (Edit rules cover all file edits).
 - README: "Lightly opinionated": a fresh install starts blank and learns the person; the only fixed requirement is a Mac that stays on.
 - **Always reachable**: `--schedule` now also keeps a Claude Code **Remote Control** server running in the workspace (`remote_control`, on by
   default; `--remote` installs it alone). The Mac appears in the Claude app's Code tab, so a fresh Theseus session can be started from anywhere.

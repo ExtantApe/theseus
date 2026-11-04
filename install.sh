@@ -7,6 +7,7 @@
 #   ./install.sh --schedule    install the nightly and morning jobs (and hourly sync if enabled)
 #   ./install.sh --remote      keep a Remote Control server running (reach Theseus from the Claude app; part of --schedule by default)
 #   ./install.sh --channel     keep an iMessage channel session running (text Theseus from your phone; opt-in)
+#   ./install.sh --grant       ask macOS for Calendar/Reminders/Notes access for the background jobs (also part of --schedule)
 #   ./install.sh --unschedule  remove the scheduled jobs (and the channel session)
 # Workspace location: set THESEUS_HOME to change it.
 set -e
@@ -106,10 +107,59 @@ for name, when in jobs.items():
     print(f"Scheduled {name}: " + ((f"{when[0]['Hour']:02d}:{when[0]['Minute']:02d} daily" if len(when) == 1 else "varies by day: " + ", ".join(f"{'Sun Mon Tue Wed Thu Fri Sat'.split()[e['Weekday']]} {e['Hour']:02d}:{e['Minute']:02d}" for e in when)) if when else
           f"local check every {interval//60} min; Claude at most every {chk.get('min_minutes_between_claude_runs', 15)} min, only when something changed"))
 PY
+  allow_connectors
   if [[ "$(python3 -c "import json;print('yes' if (json.load(open('$WS/config.json')).get('remote_control') or {}).get('enabled', True) else 'no')")" == yes ]]; then
     remote
   fi
+  grant
   echo "Keep the Mac awake for these (System Settings → Energy, or: sudo pmset repeat wakeorpoweron MTWRFSU <5 min before morning_time>)."
+}
+
+grant() {
+  [[ $ON_MAC == 1 ]] || { echo "Needs macOS."; exit 1; }
+  # Background jobs don't inherit the permissions you gave Terminal. Running the tools once *from a launchd job* makes macOS ask for them.
+  python3 - "$WS" <<'PY'
+import sys, plistlib, pathlib, subprocess, os, time
+ws = pathlib.Path(sys.argv[1]); label = "com.theseus.grant"
+p = pathlib.Path.home() / "Library/LaunchAgents" / f"{label}.plist"
+cmd = f'cd "{ws}" && bin/ek access; python3 engine/tools/notes.py inbox >/dev/null; python3 engine/tools/imsg.py doctor; echo done'
+plistlib.dump({"Label": label, "ProgramArguments": ["/bin/bash", "-c", cmd], "RunAtLoad": True,
+               "EnvironmentVariables": {"THESEUS_HOME": str(ws)},
+               "StandardOutPath": str(ws / "logs/grant.log"), "StandardErrorPath": str(ws / "logs/grant.log")}, p.open("wb"))
+uid = os.getuid()
+subprocess.run(["launchctl", "bootout", f"gui/{uid}", str(p)], capture_output=True)
+subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(p)], check=True)
+print("Asking macOS for access from the background jobs: click Allow on any Calendar, Reminders or Notes prompts (they may say \"bash\" or \"ek\").")
+time.sleep(45)
+subprocess.run(["launchctl", "bootout", f"gui/{uid}", str(p)], capture_output=True); p.unlink(missing_ok=True)
+log = (ws / "logs/grant.log").read_text() if (ws / "logs/grant.log").exists() else ""
+if "Full Disk Access" in log or "authorization denied" in log or "unable to open" in log:
+    print("⚠️  Texts still need Full Disk Access for /bin/bash: System Settings → Privacy & Security → Full Disk Access → + → ⌘⇧G /bin/bash")
+print("Details: logs/grant.log")
+PY
+}
+
+allow_connectors() {
+  # Scheduled runs can't answer permission prompts, so connector tools must be allowed up front. Personal, so it goes in settings.local.json.
+  local names; names="$(claude mcp list 2>/dev/null | sed -n 's/^\([A-Za-z0-9_.-]*\):.*/\1/p' | tr '\n' ' ')"
+  [[ -n "$names" ]] || { echo "(no connectors found with 'claude mcp list'; skipping)"; return; }
+  echo "Connectors found: $names"
+  python3 - "$WS" $names <<'PY'
+import sys, json, pathlib
+ws = pathlib.Path(sys.argv[1]); names = sys.argv[2:]
+p = ws / ".claude/settings.local.json"
+c = json.loads(p.read_text()) if p.exists() else {}
+perms = c.setdefault("permissions", {}); allow = perms.setdefault("allow", [])
+skip = {"slack"}   # Slack's connector can post; leave it out of auto-allow (ask instead)
+for n in names:
+    rule = f"mcp__{n}"
+    if n.lower() in skip:
+        print(f"  {n}: not auto-allowed (it can post). Allow it yourself if you want Slack read in scheduled runs.")
+        continue
+    if rule not in allow:
+        allow.append(rule); print(f"  allowed in scheduled runs: {n}")
+p.write_text(json.dumps(c, indent=2))
+PY
 }
 
 remote() {
@@ -170,5 +220,6 @@ case "$MODE" in
   --schedule) schedule ;;
   --channel)  channel ;;
   --remote)   remote ;;
+  --grant)    grant ;;
   *) echo "Unknown option $MODE"; exit 2 ;;
 esac

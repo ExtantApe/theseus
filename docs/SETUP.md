@@ -86,6 +86,9 @@ Example:
 ```bash
 bash ~/Theseus/engine/install.sh --schedule
 ```
+- **Background permissions:** scheduled jobs don't inherit what you granted Terminal. `--schedule` asks macOS again from a background job
+  (click **Allow** on any Calendar, Reminders or Notes prompt; it may say "bash" or "ek"), and allows your connectors in scheduled runs.
+  Texts also need **Full Disk Access for `/bin/bash`** (§1). Re-run `engine/install.sh --grant` anytime a briefing says a service was unreachable.
 - **Nightly** (per day, ~2.5 h before that day's bed time): health check, full scan, and a **🌙 Tomorrow** section in your pinned **📌 Today** note (agenda,
   top 3, what's due, prep). If anything broke, a **⚠️ Needs attention** section explains the fix.
 - **Morning** (per day, a few minutes before that day's wake time): fresh rescan, and 📌 Today is rebuilt for the new day.
