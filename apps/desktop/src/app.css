@@ -1,11 +1,15 @@
-:root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color-scheme: light dark; }
-body { margin: 0; }
+:root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color-scheme: light dark;
+  /* Aegean blue and ivory */
+  --paper: #f6f1e6; --ink: #14263a; --accent: #17395a; --on-accent: #f3ead6; --line: #14263a26; }
+@media (prefers-color-scheme: dark) { :root { --paper: #0e1c2b; --ink: #f3ead6; --accent: #2f6690; --on-accent: #f7f1e3; --line: #f3ead626; } }
+body { margin: 0; background: var(--paper); color: var(--ink); }
+h1 { font-family: ui-serif, "New York", Georgia, serif; font-weight: 500; letter-spacing: .02em; }
 .app { padding: 16px 20px; }
 header { display: flex; align-items: center; justify-content: space-between; }
 h1 { font-size: 20px; margin: 0; }
 nav button { margin-left: 6px; }
-button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #8884; background: transparent; cursor: pointer; }
-button.on { background: #6366f1; color: white; border-color: #6366f1; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 button.quiet { opacity: .7; }
 button:disabled { opacity: .5; cursor: default; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
@@ -16,7 +20,7 @@ dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
 dt { opacity: .7; }
 dd { margin: 0; }
 .card.warn { border: 1px solid #f59e0b; border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
-.msg { background: #6366f122; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+.msg { background: #8881; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
 .checks { list-style: none; padding: 0; }
 .checks li { margin: 8px 0; }
 .checks .ok b { color: #16a34a; }

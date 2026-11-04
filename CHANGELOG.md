@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- New identity: an Athenian ship in ivory on Aegean blue, a monochrome menu bar icon that follows light and dark mode, and matching colors in the app.
 - **Theseus for Mac is available** from Releases, built automatically. Every push now runs CI: leak check, script and Python checks, and an app build.
 - **Ariadne is a separate tool** (ADR 0005). Theseus doesn't move files. With `integrations.ariadne` on, a check-in offers a filing pass when `ariadne count` passes `checkin_offers.unfiled`.
 - **Theseus.app (M1 scaffold):** menu bar app in `apps/desktop` that hosts Remote Control, change checks and morning/nightly runs under one set of macOS permissions; Today / Services / Permissions views; "Take over hosting". `run-job.sh` stands down when `scheduler_host` is `app`. See ADR 0006.

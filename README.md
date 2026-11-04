@@ -1,3 +1,5 @@
+<img src="apps/desktop/app-icon.png" width="96" alt="">
+
 # Theseus
 ### Clears the path, so you can make the call.
 

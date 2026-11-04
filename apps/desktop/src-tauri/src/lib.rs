@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
@@ -475,8 +476,8 @@ pub fn run() {
             let s_menu = shared.clone();
             let pause_item = pause.clone();
             TrayIconBuilder::with_id("theseus")
-                .icon(app.default_window_icon().cloned().expect("app icon"))
-                .icon_as_template(false)
+                .icon(Image::from_bytes(include_bytes!("../icons/tray.png"))?)
+                .icon_as_template(true)
                 .tooltip("Theseus")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
