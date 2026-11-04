@@ -72,6 +72,9 @@ Fill in `<workspace>/profile.md` and `<workspace>/config.json`. Ask about:
    - Run `bash <workspace>/engine/install.sh --channel` (it asks for a yes, installs the plugin and the background session) and have them text
      "status" to test it. Point out `engine/install.sh --unschedule` to remove it.
 9. **Notes inbox folder name** (default "Theseus") and the master list note title (default "★ Master List").
+9a. **Filing (optional).** If `ariadne` is installed, ask whether Theseus should offer a filing pass when things pile up. If yes, set
+   `integrations.ariadne` true and protect what Theseus owns: `ariadne protect --path <workspace> --notes-folder <inbox folder>`, plus
+   `--note-id` for the Master List and Today notes once they exist. If it isn't installed, don't bring it up.
 10. **Alarms policy**: are alarms only for waking up, or do they use them as task nudges too?
 11. **Tone** for briefings (brief and direct, warm, playful) and anything else Theseus should know.
 

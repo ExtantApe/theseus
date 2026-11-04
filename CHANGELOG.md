@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Ariadne is a separate tool** (ADR 0005). Theseus doesn't move files. With `integrations.ariadne` on, a check-in offers a filing pass when `ariadne count` passes `checkin_offers.unfiled`.
 - **Theseus.app (M1 scaffold):** menu bar app in `apps/desktop` that hosts Remote Control, change checks and morning/nightly runs under one set of macOS permissions; Today / Services / Permissions views; "Take over hosting". `run-job.sh` stands down when `scheduler_host` is `app`. See ADR 0006.
 - **Remote Control now runs in a Terminal window by default** (`remote_control.host: "terminal"`), kept open by a background watchdog.
   Terminal is then the app in charge, so phone sessions get its permissions, like command-line runs. `"background"` and a future `"app"` mode remain.

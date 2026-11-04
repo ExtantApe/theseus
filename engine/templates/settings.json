@@ -7,6 +7,8 @@
       "Bash(python3 engine/tools/alarms.py:*)",
       "Bash(python3 engine/tools/things_export.py:*)",
       "Bash(bin/ek:*)",
+      "Bash(ariadne count:*)",
+      "Bash(ariadne rules:*)",
       "Read",
       "Edit(data/**)",
       "Edit(exports/**)",

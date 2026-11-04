@@ -10,7 +10,8 @@
     "skylight": false,
     "clickup": false,
     "slack_email_bridge": false,
-    "slack": false
+    "slack": false,
+    "ariadne": false
   },
   "email_source": "connector",
   "email_accounts": [
@@ -97,6 +98,7 @@
     "stale_items": 5,
     "review_days": 8,
     "waiting_on_days": 7,
+    "unfiled": 10,
     "disabled_triggers": []
   },
   "repeating_tasks_in_master": true,

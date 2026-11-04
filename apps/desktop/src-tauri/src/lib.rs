@@ -16,7 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 
 const PY: &str = "/usr/bin/python3";
 
@@ -454,6 +454,16 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            // Open on the very first launch, so a new user isn't left with only a menu bar icon.
+            let seen = shared.ws.join("logs/.app-opened");
+            if !seen.exists() {
+                let _ = fs::write(&seen, "");
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+
             let status_item = MenuItem::with_id(app, "status", "Theseus: starting…", false, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open Theseus", true, None::<&str>)?;
             let run_status = MenuItem::with_id(app, "run_status", "Run status now", true, None::<&str>)?;
@@ -525,6 +535,15 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Theseus");
+        .build(tauri::generate_context!())
+        .expect("error while starting Theseus")
+        .run(|handle, event| {
+            // Opening the app again (Finder, Spotlight) brings the window back.
+            if let RunEvent::Reopen { .. } = event {
+                if let Some(w) = handle.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+        });
 }

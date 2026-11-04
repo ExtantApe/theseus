@@ -153,6 +153,7 @@ Use only what you have. Everything except Reminders, Calendar and Notes is optio
 | [ClickUp](https://clickup.com) | assignments due; project pointers | official [ClickUp MCP](https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server-1) | ✅ optional |
 | [Skylight](https://www.ourskylight.com) | chores, groceries, to-dos, family events | community [skylight-mcp](https://github.com/chrischall/skylight-mcp) (unofficial) | ⚠️ optional, use at your own risk |
 | [Things 3](https://culturedcode.com/things/) | one-time import (read-only) | built in (local database) | ✅ migration only |
+| [Ariadne](https://github.com/mgilardi/ariadne) | a separate app that files your Mac's files and Notes, with your yes; Theseus only offers it when things pile up | `ariadne` command | ✅ optional |
 | iPhone alarms ([Clock](https://support.apple.com/guide/iphone/alarm-iph5a1e0c47f/ios)) | tomorrow's alarms, mismatch warnings | a Shortcut that saves them to iCloud Drive | ✅ optional |
 | Apple Watch alarms | (they never leave the watch) | tell Theseus the times | ❌ not readable |
 | Anything else (Notion, Todoist, Asana, Linear…) | whatever its tools allow | its MCP server or Composio toolkit, plus a line in your profile | 🧪 possible, not built in |

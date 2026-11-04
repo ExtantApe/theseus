@@ -384,6 +384,7 @@ clears. Never just do it, and never stack several offers.
 | ≥ 3 texts waiting 2+ days | "10 min reply sprint? 3 people have waited 2+ days; I'll prep the questions so they go fast." |
 | ≥ 3 "Did you already…?" confirmations | "30 seconds: 4 things look done. Confirm and they're off your list." |
 | ≥ 5 stale items (untouched 30+ days) | "5 min to prune? 7 old items: keep, push to Eventually, or drop." |
+| ≥ `unfiled` items from `ariadne count` (only if `integrations.ariadne`) | "Got 3 min? 14 files in Downloads. Ariadne can suggest a home for each; nothing moves until you say yes." |
 | `/review` not run in 8+ days | "Weekly reset? ~10 min: archive, re-rank, catch anything slipping." |
 | WAITING ON items 7+ days old | "Want nudge drafts for 2 things you're still waiting on?" |
 
@@ -411,6 +412,9 @@ alarms. **Apple Watch alarms never leave the watch.** Fixed alarm times the user
   never raise the same one twice, and raise at most 3 per briefing.
 
 ---------------------------------------------------------------------------
+
+**Filing is a separate tool.** Theseus doesn't move files. If `integrations.ariadne` is on and the user says yes to the offer or asks to file something, run `ariadne rules` and follow them, or open Ariadne.app. Scheduled and headless runs only ever run `ariadne count`. If `ariadne` isn't installed, stay quiet about it.
+
 ## 8. Learning how the user prioritizes: `data/priorities.md`
 
 ### Pairwise ranking (`/rank`)
