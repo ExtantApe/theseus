@@ -12,5 +12,6 @@ for f in ["engine/templates/config.json", "engine/templates/settings.json", ".cl
     json.load(open(f))
 PY
 swiftc -typecheck engine/tools/ek.swift
+node --test apps/desktop/src/*.test.ts
 cmp <(sed '/^SRC=/d' install.sh) <(sed '/^SRC=/d' engine/install.sh) || { echo "install.sh and engine/install.sh differ"; exit 1; }
 echo "✅ checks passed"

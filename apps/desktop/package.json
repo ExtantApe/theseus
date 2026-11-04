@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "icons": "tauri icon ../../brand/icon-1024.png",
     "app:dev": "tauri dev",
-    "app:build": "tauri build"
+    "app:build": "tauri build",
+    "test": "node --test src/*.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

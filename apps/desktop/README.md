@@ -48,6 +48,12 @@ Remote Control can take a few minutes to return after switching, because the old
 Only one Claude job runs at a time. Output goes to `logs/app-<job>-<time>.out`, plus `logs/app.log`, `logs/checks.log` and
 `logs/remote-control.log`.
 
+## Your list
+
+The List page and the Now and Communication blocks on Today edit `data/master.md` directly. Drag to reorder or move between sections, double-click to rename, or switch to Markdown. It saves as you go, with undo and redo (⌘Z, ⇧⌘Z). A check-off waits three seconds so you can change your mind, then moves to Done.
+
+What you do is logged in `data/app-edits.jsonl`, and the next sync carries it to Reminders, Skylight and ClickUp and treats your drags as your own ranking. An hourly copy of the list goes in `data/archive`.
+
 ## Not yet
 
-Apple signing and automatic updates (an unsigned app would need its permissions granted again after each update anyway), an in-app list editor, notifications from inside the app (briefings still reach you through the pinned Today note and the Claude app), and the M6 wall view. Releases: [RELEASING.md](../../RELEASING.md).
+Apple signing and automatic updates (an unsigned app would need its permissions granted again after each update anyway), notifications from inside the app (briefings still reach you through the pinned Today note and the Claude app), and the M6 wall view. Releases: [RELEASING.md](../../RELEASING.md).

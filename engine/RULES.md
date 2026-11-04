@@ -115,6 +115,8 @@ Item format (one line, middle-dot separated, id last):
 - `id:tNNNN`: permanent. Next number is in `data/state.json → next_task_id`. Ids are hidden in the phone view.
 - Within each section, **order = priority** (top is most important). Re-rank on every status run using
   `data/priorities.md`.
+  **What the user placed by hand in Theseus.app wins.** Moves in `data/app-edits.jsonl` (§3) are their ranking. Don't re-sort around them; new items
+  go in around what they placed.
 
 When to create a **Reminder** (keep Reminders lean): a specific time/date nudge is needed, the user
 says "remind me", it's location-based, or a deadline is within ~48h and they'd want a phone ping.
@@ -141,6 +143,17 @@ To change a repeat: `bin/ek update --id … --recur "<RRULE>"`. To stop one: `--
 
 ---------------------------------------------------------------------------
 ## 3. Sync rules (every `/status`, `/sync`, `/inbox`, `/morning`, `/nightly`)
+
+**First, what the user did in Theseus.app.** The app edits `data/master.md` directly and logs each action in `data/app-edits.jsonl`, one JSON object per line
+(`action`: `complete`, `reopen`, `move`, `add`, `edit` or `undo`, with `id`, `title`, and for moves `from`, `to`, `above`). An `undo` line cancels the action in its `of` field, so
+net those out first. The list already shows these changes, so don't redo them; carry them to everything else:
+- `complete` → complete the linked Reminder, Skylight item and ClickUp task (§3.2). The item is already in ✅ DONE. A repeating item is marked `done for now <date>`: complete
+  that occurrence, remove the marker and update its due date.
+- `reopen` → reopen what's linked, if it was completed.
+- `move` → the user's own ranking. Record what it tells you about priorities (§8), the same as an A-or-B answer. Respect the new order and section.
+- `add` → a line with no `id:` and `#Inbox`: give it an id, a real category if one clearly fits, and sync it out like any new item.
+- `edit` → carry the new title to what's linked.
+Then append the lines to `data/archive/app-edits-YYYY-MM.jsonl` and empty `data/app-edits.jsonl`.
 
 `data/sync-map.json` links one task across systems:
 `{"t0042": {"reminder": "<ek id>", "skylight_item": "<id>", "clickup": "<id>", "person": "Sam Rivera", "email_to": "sam@example.com", "title": "…", "done": false}}`

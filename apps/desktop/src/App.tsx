@@ -1,9 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Block, ListTools, useListActions, type ListActions } from './ListUI'
+import { dropEmoji, findSection } from './master'
 import { Icon, type IconName } from './ui/Icon'
+import { useMaster, type Master } from './useMaster'
 
-type Tab = 'today' | 'activity' | 'setup'
+type Tab = 'today' | 'list' | 'activity' | 'setup'
 type Status = {
   workspace: string
   claude: string
@@ -23,6 +26,7 @@ type Section = { title: string; lines: string[] }
 
 const NAV: [Tab, string, IconName][] = [
   ['today', 'Today', 'today'],
+  ['list', 'List', 'plans'],
   ['activity', 'Activity', 'activity'],
   ['setup', 'Setup', 'setup'],
 ]
@@ -30,7 +34,7 @@ const JOB_WORDS: Record<string, string> = { status: 'Refreshing', sync: 'Syncing
 
 /** Turns the Today note's markdown into parts the screen can lay out. */
 function parseToday(md: string) {
-  const title = (md.match(/^# (.*)$/m)?.[1] ?? '').replace(/^[^\p{L}\p{N}]+/u, '')
+  const title = dropEmoji(md.match(/^# (.*)$/m)?.[1] ?? '').replace(/^[^\p{L}\p{N}]+/u, '')
   const updated = md.match(/^_(Updated[^·_]*)/m)?.[1]?.trim() ?? ''
   const sections: Section[] = []
   let cur: Section | null = null
@@ -41,7 +45,7 @@ function parseToday(md: string) {
       cur = { title: line.slice(3).replace(/^[^\p{L}\p{N}]+/u, ''), lines: [] }
       sections.push(cur)
     } else if (line.trim()) {
-      ;(cur ? cur.lines : lead).push(line.trim())
+      ;(cur ? cur.lines : lead).push(dropEmoji(line.trim()))
     }
   }
   return { title, updated, lead, sections }
@@ -58,13 +62,18 @@ function inline(text: string): ReactNode {
   })
 }
 
+const TODAY_ICONS: [RegExp, IconName][] = [[/agenda/i, 'calendar'], [/due|remind|chore/i, 'bell'], [/up next/i, 'skipForward'], [/tomorrow/i, 'moon'], [/film/i, 'film'], [/waiting/i, 'message'], [/needs you/i, 'info']]
+const todayIcon = (title: string): IconName => TODAY_ICONS.find(([re]) => re.test(title))?.[1] ?? 'list'
+
 const isTodo = (l: string) => l.startsWith('☐')
 const noTodo = (l: string) => l.replace(/^☐\s*/, '')
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [status, setStatus] = useState<Status | null>(null)
-  const refresh = useCallback(() => invoke<Status>('get_status').then(setStatus), [])
+  const master = useMaster()
+  const actions = useListActions(master)
+  const refresh = useCallback(() => invoke<Status>('get_status').then(setStatus).catch(() => {}), [])
   useEffect(() => {
     void refresh()
     const t = setInterval(refresh, 3000)
@@ -100,15 +109,54 @@ export default function App() {
         {foot && <div className="side-foot"><span className={`pill ${foot.cls}`}><span className="dot" />{foot.text}</span></div>}
       </aside>
       <div className="main">
-        {tab === 'today' && <Today status={status} onChange={refresh} />}
+        {tab === 'today' && <Today status={status} onChange={refresh} m={master} a={actions} />}
+        {tab === 'list' && <ListPage m={master} a={actions} />}
         {tab === 'activity' && <Activity status={status} onChange={refresh} onSetup={() => setTab('setup')} />}
         {tab === 'setup' && <Setup status={status} onChange={refresh} />}
       </div>
+      {actions.toast && (
+        <div className="toast" role="status">
+          <span>{actions.toast}</span>
+          {master.canUndo && <button onClick={() => { master.undo(); actions.clearToast() }}>Undo</button>}
+        </div>
+      )}
     </div>
   )
 }
 
-function Today({ status, onChange }: { status: Status | null; onChange: () => void }) {
+function ListPage({ m, a }: { m: Master; a: ListActions }) {
+  const [raw, setRaw] = useState(() => {
+    try { return localStorage.getItem('theseus.listView') === 'markdown' } catch { return false }
+  })
+  const choose = (v: boolean) => {
+    setRaw(v)
+    try { localStorage.setItem('theseus.listView', v ? 'markdown' : 'list') } catch { /* it's only a convenience */ }
+  }
+  const closedAtFirst = new Set(['eventually', 'done', 'projects', 'figure out'])
+  return (
+    <div className="page">
+      <div className="head">
+        <div className="grow">
+          <h1>List</h1>
+          <div className="sub">Drag to reorder. Double-click to rename. Everything saves as you go.</div>
+        </div>
+        <ListTools m={m} />
+        <div className="segmented" role="group" aria-label="View">
+          <button aria-pressed={!raw} onClick={() => choose(false)}><Icon name="list" />List</button>
+          <button aria-pressed={raw} onClick={() => choose(true)}><Icon name="code" />Markdown</button>
+        </div>
+      </div>
+      {m.notice && <div className="notice"><Icon name="info" /><div className="grow">{m.notice}</div><button className="btn quiet icon" style={{ height: 22, width: 22 }} aria-label="Dismiss" onClick={m.clearNotice}><Icon name="close" size={14} /></button></div>}
+      {m.text === '' && <div className="card empty"><Icon name="plans" size={28} /><h2>No list yet</h2><div>Run <code>/migrate</code> in Claude Code to build it from your reminders and notes.</div></div>}
+      {raw && m.text !== null && (
+        <textarea className="md-editor" spellCheck={false} aria-label="Master list as Markdown" value={m.text} onChange={(e) => m.type(e.target.value)} />
+      )}
+      {!raw && m.doc?.sections.map((s) => <Block key={s.key} section={s} m={m} a={a} collapsible defaultOpen={!closedAtFirst.has(s.key)} />)}
+    </div>
+  )
+}
+
+function Today({ status, onChange, m, a }: { status: Status | null; onChange: () => void; m: Master; a: ListActions }) {
   const [md, setMd] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [asked, setAsked] = useState<string | null>(null)
@@ -142,7 +190,10 @@ function Today({ status, onChange }: { status: Status | null; onChange: () => vo
 
   const attention = today.sections.find((s) => /attention/i.test(s.title))
   const now = today.sections.find((s) => /^now\b/i.test(s.title))
-  const rest = today.sections.filter((s) => s !== attention && s !== now && !/^jot/i.test(s.title) && s.lines.length)
+  const waitingOn = today.sections.find((s) => /waiting on you/i.test(s.title))
+  const rest = today.sections.filter((s) => s !== attention && s !== now && s !== waitingOn && !/^jot/i.test(s.title) && s.lines.length)
+  const liveNow = m.doc ? findSection(m.doc, 'now') : undefined
+  const liveComms = m.doc ? findSection(m.doc, 'communications') : undefined
 
   return (
     <div className="page">
@@ -151,6 +202,7 @@ function Today({ status, onChange }: { status: Status | null; onChange: () => vo
           <h1>{today.title || 'Today'}</h1>
           {today.updated && <div className="sub">{today.updated}</div>}
         </div>
+        <ListTools m={m} />
         <button className="btn" disabled={!!running} onClick={() => run('status')}>
           <Icon name="refresh" className={running === 'status' ? 'spin' : undefined} />
           {running === 'status' ? 'Refreshing…' : 'Refresh'}
@@ -193,13 +245,24 @@ function Today({ status, onChange }: { status: Status | null; onChange: () => vo
         </div>
       )}
 
-      {now && (
+      {m.notice && <div className="notice"><Icon name="info" /><div className="grow">{m.notice}</div><button className="btn quiet icon" style={{ height: 22, width: 22 }} aria-label="Dismiss" onClick={m.clearNotice}><Icon name="close" size={14} /></button></div>}
+
+      {liveNow ? <Block section={liveNow} m={m} a={a} /> : now && (
         <div className="card">
           <div className="card-title">Now</div>
           <ol className="now selectable">
             {now.lines.filter(isTodo).map((l, i) => <li key={i}><span className="rank">{i + 1}</span><span className="text">{inline(noTodo(l))}</span></li>)}
           </ol>
         </div>
+      )}
+
+      {liveComms && (
+        <Block section={liveComms} m={m} a={a} footer={waitingOn && waitingOn.lines.length > 0 && (
+          <div className="also selectable">{waitingOn.lines.map((l, i) => <div key={i}>{inline(l)}</div>)}</div>
+        )} />
+      )}
+      {!liveComms && waitingOn && (
+        <div className="card"><div className="block-head"><Icon name="message" className="block-icon" /><span className="block-name">Communication</span></div><div className="lines selectable">{waitingOn.lines.map((l, i) => <div key={i}>{inline(l)}</div>)}</div></div>
       )}
 
       {today.lead.length > 0 && <div className="muted small">{today.lead.map((l, i) => <div key={i}>{inline(l)}</div>)}</div>}
@@ -210,7 +273,7 @@ function Today({ status, onChange }: { status: Status | null; onChange: () => vo
             <div className="column" key={col}>
               {rest.filter((_, i) => i % 2 === col).map((s) => (
                 <div className="card" key={s.title}>
-                  <div className="card-title">{s.title}</div>
+                  <div className="block-head"><Icon name={todayIcon(s.title)} className="block-icon" /><span className="block-name">{s.title}</span></div>
                   <div className="lines selectable">
                     {s.lines.map((l, i) => isTodo(l) ? <div className="todo" key={i}>{inline(noTodo(l))}</div> : <div key={i}>{inline(l)}</div>)}
                   </div>

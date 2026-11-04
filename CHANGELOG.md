@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **Edit your list in the app.** A new List page, and live Now and Communication blocks on Today, both working on `data/master.md`. Drag to reorder or move between sections, double-click to rename, or switch to a raw Markdown view. It saves as you go, with undo and redo (⌘Z, ⇧⌘Z) and an hourly backup in `data/archive`. A sync that changes the file at the same time is merged, not overwritten.
+- **Checking something off** gives you three seconds to change your mind, then it moves to Done. Repeating items stay put, marked done for now.
+- The next sync carries what you did to Reminders, Skylight and ClickUp, and treats your drags as your own ranking instead of re-sorting them (`data/app-edits.jsonl`, RULES §3).
+- Icons instead of emoji throughout the app, and a softer, pastel app icon.
 - **Calendar permission fixed.** The app was built with Apple's hardened runtime and no calendar entitlement, so macOS refused silently: no dialog, and that pane has no + button. Reminders has no such gate, which is why it worked.
 - **New interface and icon.** A sidebar with Today, Activity and Setup; the Today note laid out as a real page; ask Theseus from the app; shared design system with Ariadne (`brand/README.md`). The icon is now a Greek key unwinding into a straight line.
 - **Setup** shows each permission's real state without prompting, and never freezes the window while a dialog is up.

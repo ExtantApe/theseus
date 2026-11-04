@@ -107,6 +107,8 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
 ### Theseus for Mac (recommended once you're set up)
 A menu bar app that keeps everything running: Remote Control, the checks and your briefings. You grant macOS permissions once, to the app, and everything it starts can use them.
 
+It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo.
+
 1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
 2. Theseus is free and unsigned (Apple charges for signing), so macOS blocks the first launch. Allow it one of two ways:
 

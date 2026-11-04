@@ -8,7 +8,7 @@ Exit code 10 = skip (nothing changed, outside awake hours, near the morning/nigh
 cooldown are remembered and handled on the next allowed run).
 
 Sources (only enabled integrations): texts (newest message id), Notes inbox + pinned Today note (modification dates),
-Reminders and today's Calendar (content hash via bin/ek), iPhone alarms file (mtime), Apple Mail (newest message id).
+Reminders and today's Calendar (content hash via bin/ek), iPhone alarms file (mtime), Apple Mail (newest message id), things done in Theseus.app.
 Email via connectors can't be checked locally, so it's covered by the periodic full refresh.
 
 Usage: python3 engine/tools/changes.py [--explain] [--force]
@@ -121,6 +121,10 @@ def fingerprint(c: dict, prev_state: dict, extra: dict) -> dict[str, str]:
         vs = sorted(root.glob("V[0-9]*"))
         if vs:
             fp["mail"] = str(sql_scalar(vs[-1] / "MailData/Envelope Index", "SELECT MAX(ROWID) FROM messages"))
+    # Things done in Theseus.app wait for a sync to reach Reminders and the rest. The sync empties this file.
+    edits = WS / "data" / "app-edits.jsonl"
+    if edits.exists() and edits.stat().st_size:
+        fp["app"] = h(str(edits.stat().st_size))
     return fp
 
 

@@ -349,6 +349,59 @@ fn run_now(kind: String, text: Option<String>, s: State<'_, S>) -> Result<(), St
     run_job(&s, &kind, text.as_deref().unwrap_or("started from Theseus.app"))
 }
 
+// ---------- the master list ----------
+
+fn master_path(ws: &Path) -> PathBuf {
+    ws.join("data/master.md")
+}
+
+#[tauri::command(async)]
+fn read_master(s: State<'_, S>) -> String {
+    fs::read_to_string(master_path(&s.ws)).unwrap_or_default()
+}
+
+/// Auto-save. `base` is the text this edit started from: if the file changed since (a sync ran), nothing is written and the window
+/// replays the edit on the new text. The write is atomic, and an hourly copy goes in data/archive.
+#[tauri::command(async)]
+fn write_master(text: String, base: String, s: State<'_, S>) -> Result<(), String> {
+    let path = master_path(&s.ws);
+    let disk = fs::read_to_string(&path).unwrap_or_default();
+    if disk != base {
+        return Err("conflict".into());
+    }
+    if disk == text {
+        return Ok(());
+    }
+    let (d, m) = local_now();
+    let archive = s.ws.join("data/archive");
+    let _ = fs::create_dir_all(&archive);
+    let backup = archive.join(format!("master-app-{d}-{:02}.md", m / 60));
+    if !backup.exists() {
+        let _ = fs::write(&backup, &disk);
+    }
+    let tmp = s.ws.join("data/.master.md.tmp");
+    fs::write(&tmp, &text).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// What the person did, for the next sync: it completes things elsewhere and treats moves as their own ranking (RULES §3).
+#[tauri::command(async)]
+fn log_edit(event: Value, s: State<'_, S>) -> Result<(), String> {
+    use std::io::Write;
+    let (d, m) = local_now();
+    let mut e = event;
+    e["time"] = Value::from(format!("{d} {:02}:{:02}", m / 60, m % 60));
+    let mut f = OpenOptions::new().create(true).append(true).open(s.ws.join("data/app-edits.jsonl")).map_err(|e| e.to_string())?;
+    writeln!(f, "{e}").map_err(|e| e.to_string())
+}
+
+/// Update the phone's copy of the list. If the person edited that note, the tool refuses and the next run folds their edits in.
+#[tauri::command(async)]
+fn publish_master(s: State<'_, S>) -> Result<(), String> {
+    let o = Command::new(PY).args(["engine/tools/notes.py", "master-publish"]).current_dir(&s.ws).env("PATH", path_env()).output().map_err(|e| e.to_string())?;
+    if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().chars().take(200).collect()) }
+}
+
 #[derive(Serialize)]
 struct Run {
     file: String,
@@ -562,7 +615,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
-            get_status, read_today, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
+            get_status, read_today, read_master, write_master, log_edit, publish_master, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
