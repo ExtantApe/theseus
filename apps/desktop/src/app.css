@@ -1,0 +1,23 @@
+:root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color-scheme: light dark; }
+body { margin: 0; }
+.app { padding: 16px 20px; }
+header { display: flex; align-items: center; justify-content: space-between; }
+h1 { font-size: 20px; margin: 0; }
+nav button { margin-left: 6px; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #8884; background: transparent; cursor: pointer; }
+button.on { background: #6366f1; color: white; border-color: #6366f1; }
+button.quiet { opacity: .7; }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+pre { white-space: pre-wrap; font: 13px/1.45 ui-monospace, Menlo, monospace; }
+.today { font-family: inherit; font-size: 14px; }
+.out { max-height: 240px; overflow: auto; background: #8881; padding: 8px; border-radius: 6px; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+dt { opacity: .7; }
+dd { margin: 0; }
+.card.warn { border: 1px solid #f59e0b; border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+.msg { background: #6366f122; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+.checks { list-style: none; padding: 0; }
+.checks li { margin: 8px 0; }
+.checks .ok b { color: #16a34a; }
+.checks .bad b { color: #dc2626; }

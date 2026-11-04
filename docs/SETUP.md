@@ -141,6 +141,10 @@ crash, reboot or `--update`). Then:
 2. Tap it, pick your Theseus folder, and start a session. Each new session loads the latest rules, so start fresh rather than continuing an old chat.
 3. Talk to it like normal: "status", "what's next, 20 min", "add …".
 - Same on any computer at claude.ai/code.
+- **Where it runs:** by default (`remote_control.host: "terminal"`) the server runs in a **Terminal window titled "Theseus · Remote Control"**
+  that a background watchdog reopens if it's closed. Minimize it, but keep it open. Running inside Terminal gives your phone sessions
+  Terminal's permissions (texts, Calendar, Reminders, Notes), exactly like running `claude` from the command line. (`"background"` runs it
+  without a window, but macOS then checks Claude Code's own permissions; `"app"` is for the coming Theseus.app.)
 - The Mac needs to be awake and online (see "Keep the Mac awake"). If it isn't, your 📌 Today and ★ Master List notes still work on the phone.
 - Turn it off: set `"remote_control": {"enabled": false}` and run `engine/install.sh --unschedule`, then `--schedule` again. Logs: `logs/remote-control.log`.
 - Needs a recent Claude Code (Remote Control server mode). If it fails, update Claude Code first.

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Theseus.app is the "responsible" app for everything it starts (Claude Code, the engine's tools), so macOS asks for these
+       permissions in Theseus's name. Without these descriptions macOS refuses silently. -->
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Theseus reads your calendars for your agenda and adds events you ask for.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Theseus reads your calendars for your agenda and adds events you ask for.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>Theseus keeps your reminders in sync with your list and creates the ones you ask for.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>Theseus keeps your reminders in sync with your list and creates the ones you ask for.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Theseus reads your Notes inbox folder and updates your pinned Today and Master List notes.</string>
+  <key>NSContactsUsageDescription</key>
+  <string>Theseus shows names instead of phone numbers for people who are waiting on you.</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>

@@ -83,18 +83,25 @@ def snapshot(src: Path, dst: Path, max_age_min: float, fresh: bool) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() and not fresh and (time.time() - dst.stat().st_mtime) < max_age_min * 60:
         return dst
-    if not src.exists():
-        die_access(FileNotFoundError(str(src)), str(src))
     tmp = dst.with_suffix(".tmp")
     try:
+        if not src.exists():          # may itself raise PermissionError when macOS blocks the folder
+            raise sqlite3.OperationalError(f"{src} not found")
         s = sqlite3.connect(src.as_uri() + "?mode=ro", uri=True, timeout=10)
         d = sqlite3.connect(str(tmp))
         s.backup(d)
         d.close(); s.close()
         os.replace(tmp, dst)
-    except sqlite3.Error as e:
+    except (sqlite3.Error, OSError) as e:
         if tmp.exists():
             tmp.unlink()
+        if dst.exists():
+            # No direct access here (e.g. inside a Claude Code session without Full Disk Access): fall back to the copy the
+            # background checks keep fresh.
+            age = (time.time() - dst.stat().st_mtime) / 60
+            print(f"note: using the saved copy of {src.name} from {age:.0f} min ago (no direct access: {e}). "
+                  f"The background checks refresh it every few minutes.", file=sys.stderr)
+            return dst
         die_access(e, str(src))
     return dst
 

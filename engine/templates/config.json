@@ -111,6 +111,7 @@
   },
   "remote_control": {
     "enabled": true,
-    "name": "Theseus"
+    "name": "Theseus",
+    "host": "terminal"
   }
 }

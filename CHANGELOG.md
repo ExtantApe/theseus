@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Theseus.app (M1 scaffold):** menu bar app in `apps/desktop` that hosts Remote Control, change checks and morning/nightly runs under one set of macOS permissions; Today / Services / Permissions views; "Take over hosting". `run-job.sh` stands down when `scheduler_host` is `app`. See ADR 0006.
+- **Remote Control now runs in a Terminal window by default** (`remote_control.host: "terminal"`), kept open by a background watchdog.
+  Terminal is then the app in charge, so phone sessions get its permissions, like command-line runs. `"background"` and a future `"app"` mode remain.
+- **Remote Control server fixes**: input held open with a FIFO (it quit on "end of input" under launchd), a clean stop on restart (no leftover
+  server blocking the next one with "already served"), and leftovers stopped before starting.
+- **Texts and Mail inside Claude Code sessions**: when macOS blocks direct reads there, the tools fall back to saved copies, which the
+  5-minute checks (running from /bin/bash, which has access) refresh whenever texts or mail change.
 - `--schedule` now also (1) allows your connected MCP servers in scheduled runs via `.claude/settings.local.json` (Slack excluded, since it can
   post), and (2) runs `--grant`: a one-off background job that makes macOS ask for Calendar, Reminders and Notes access *for the background jobs*,
   which don't inherit Terminal's permissions. Removed invalid `Write(...)` permission rules (Edit rules cover all file edits).

@@ -162,6 +162,23 @@ def log_rhythm(c: dict, now: float, changed: list[str]):
     p.write_text(json.dumps(r, indent=1))
 
 
+def refresh_copies(c: dict, changed: list[str]):
+    """This check runs from /bin/bash, which has Full Disk Access. Claude Code sessions may not, so they read the saved copies
+    in cache/. Refresh them whenever texts or mail changed, and at least every 30 minutes."""
+    jobs = []
+    snap = WS / "cache" / "chat-snapshot.db"
+    stale = not snap.exists() or time.time() - snap.stat().st_mtime > 1800
+    if on(c, "texts") and ("texts" in changed or stale):
+        jobs.append([sys.executable, str(WS / "engine/tools/imsg.py"), "--fresh", "doctor"])
+    if on(c, "email") and c.get("email_source") == "apple_mail" and "mail" in changed:
+        jobs.append([sys.executable, str(WS / "engine/tools/mail.py"), "--fresh", "doctor"])
+    for cmd in jobs:
+        try:
+            subprocess.run(cmd, cwd=WS, capture_output=True, timeout=120)
+        except Exception:
+            pass
+
+
 def main():
     explain = "--explain" in sys.argv
     force = "--force" in sys.argv
@@ -205,6 +222,7 @@ def main():
         "last_activity": now if changed else prev.get("last_activity", now),
     }, indent=1))
     log_rhythm(c, now, changed)
+    refresh_copies(c, changed)
     if explain:
         print(json.dumps({"run_claude": run_claude, "reason": reason, "changed_now": changed,
                           "fingerprint": fp}, indent=1))

@@ -66,6 +66,10 @@ instead of making it for them.
 | Slack email bridge | the email account that receives Slack notifications (§10) | `slack_email_bridge` with `slack_source: "email"` |
 
 Use `--fresh` on imsg and mail whenever the user asks for status.
+Inside a Claude Code session macOS may block direct reads of
+Messages and Mail (it checks Claude Code's own permissions). The tools then fall back to the copies the background checks refresh every few
+minutes and print "note: using the saved copy … from N min ago". That's normal. Mention the age only if it's over 15 minutes, and never tell
+the user Full Disk Access is missing for `/bin/bash` because of that note.
 
 **Choosing sources.** Each email and calendar account has its own `source` in `email_accounts` / `calendar_accounts`
 (`apple_mail` / `apple`, `mcp`, or `composio`), and `email_source` / `calendar_source` are the defaults. Both are set during setup (each user picks what they

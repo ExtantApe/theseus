@@ -7,6 +7,10 @@ WS="${THESEUS_HOME:-$HOME/Theseus}"
 CLAUDE_BIN="__CLAUDE_BIN__"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$PATH"
 cd "$WS" || exit 1
+# When Theseus.app hosts the schedule, it runs these jobs itself (with the app's permissions); the old launchd jobs stand down.
+if /usr/bin/python3 -c 'import json,sys; sys.exit(0 if json.load(open("config.json")).get("scheduler_host")=="app" else 1)' 2>/dev/null; then
+  exit 0
+fi
 mkdir -p logs briefings
 STAMP="$(date +%Y-%m-%d_%H%M)"
 # Make sure helper apps are running (quietly, in the background). config.json → "ensure_apps": ["Claude", "Mail"]

@@ -1,0 +1,13 @@
+{
+  "name": "theseus",
+  "private": true,
+  "description": "Theseus: a private, never-sends personal assistant for Claude Code on macOS. Engine plus Theseus for Mac.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.2.2",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "app:dev": "pnpm --filter theseus-desktop app:dev",
+    "app:build": "pnpm --filter theseus-desktop app:build"
+  }
+}

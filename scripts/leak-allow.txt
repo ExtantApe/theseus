@@ -2,3 +2,5 @@
 # A line in a file is skipped only if it contains one of these phrases. Keep this list short and public-only.
 github.com/mgilardi/theseus
 mgilardi/theseus
+128x128@2x.png
+io.github.mgilardi.theseus

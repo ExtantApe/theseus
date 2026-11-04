@@ -62,7 +62,11 @@ def snapshot(src: Path, name: str, fresh: bool, max_age_min=5) -> Path:
     try:
         s = sqlite3.connect(src.as_uri() + "?mode=ro", uri=True, timeout=10)
         d = sqlite3.connect(str(dst)); s.backup(d); d.close(); s.close()
-    except sqlite3.Error as e:
+    except (sqlite3.Error, OSError) as e:
+        if dst.exists():
+            age = (time.time() - dst.stat().st_mtime) / 60
+            print(f"note: using the saved copy of {src.name} from {age:.0f} min ago (no direct access: {e}).", file=sys.stderr)
+            return dst
         die(f"Can't read {src} ({e}). Grant Full Disk Access to your terminal app (and /bin/bash for scheduled runs).")
     return dst
 

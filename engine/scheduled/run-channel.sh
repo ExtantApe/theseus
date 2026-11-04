@@ -27,7 +27,7 @@ command -v bun >/dev/null || { note "Bun is missing (the iMessage plugin needs i
 
 note "starting channel session ($PLUGIN)"
 # `script` gives the interactive session a terminal it can run in while nobody is watching.
-script -q /dev/null "$CLAUDE_BIN" --channels "plugin:$PLUGIN" >> "$LOG" 2>&1 &
+tail -f /dev/null | script -q /dev/null "$CLAUDE_BIN" --channels "plugin:$PLUGIN" >> "$LOG" 2>&1 &   # never-ending input (see run-remote.sh)
 PID=$!
 STARTED_DAY=$(date +%F)
 while kill -0 "$PID" 2>/dev/null; do
