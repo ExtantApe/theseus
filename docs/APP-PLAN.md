@@ -103,8 +103,8 @@ iPhone Shortcut instructions (optional) → `/migrate` (shown as a guided review
 ## 6. Milestones
 | | Scope | Done when |
 |---|---|---|
-| **M0** (now) | Engine + plugin (v0.4) on the maintainer's Mac | 2 weeks of daily use; Today note, checks and migration feel right |
-| **M1** | Menu-bar app: read-only Today popover, Add, What's next, "Use my Claude Code" mode, bundled engine | app replaces Terminal for daily use |
+| **M0** (done) | Engine + plugin (v0.4) on the maintainer's Mac | 2 weeks of daily use; Today note, checks and migration feel right |
+| **M1** (first version shipped: menu bar app hosting everything, Today, Services and Permissions views, ADR 0006; popover and Add are still to come) | Menu-bar app: read-only Today popover, Add, What's next, "Use my Claude Code" mode, bundled engine | app replaces Terminal for daily use |
 | **M2** | Background agent (app LaunchAgent) replaces the launchd scripts; native EventKit; permissions owned by the app | no Terminal needed after install |
 | **M3** | Main window: List (drag-rank), Rank cards, Replies questionnaire, Settings with the Schedule editor | full feature parity with the plugin |
 | **M4** | First-run wizard, unsigned DMG release, docs, a 5-person private beta | a non-technical friend installs it alone |

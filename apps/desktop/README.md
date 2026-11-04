@@ -18,7 +18,7 @@ pnpm app:dev                           # run it in development
 pnpm app:build                         # → apps/desktop/src-tauri/target/release/bundle/macos/Theseus.app
 ```
 
-Copy `Theseus.app` into `/Applications` (permissions stick to the app's location and signature, so grant them after moving it).
+Copy `Theseus.app` into `/Applications`, and grant permissions after moving it. Macs identify an unsigned app by its exact build, so a rebuild may ask for them again.
 
 ## Switch over
 
@@ -49,5 +49,4 @@ Only one Claude job runs at a time. Output goes to `logs/app-<job>-<time>.out`, 
 
 ## Not yet
 
-Signing and notarization, a release workflow (copy `desktop.yml` from OnePedigree), an in-app list editor, notifications
-from inside the app (briefings still reach you through the pinned Today note and the Claude app), and the M6 wall view.
+Apple signing and automatic updates (an unsigned app would need its permissions granted again after each update anyway), an in-app list editor, notifications from inside the app (briefings still reach you through the pinned Today note and the Claude app), and the M6 wall view. Releases: [RELEASING.md](../../RELEASING.md).

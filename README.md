@@ -102,6 +102,24 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
    phone**: your Mac shows up in the Claude app's Code tab (Remote Control), so you can start a Theseus session anywhere. Then pin **📌 Today** and
    **★ Master List** in Notes.
 
+### Theseus for Mac (recommended once you're set up)
+A menu bar app that keeps everything running: Remote Control, the checks and your briefings. You grant macOS permissions once, to the app, and everything it starts can use them.
+
+1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
+2. Theseus is free and unsigned (Apple charges for signing), so macOS blocks the first launch. Allow it one of two ways:
+
+   **Terminal (quickest):**
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Theseus.app"
+   ```
+
+   **Or System Settings:** open the app and dismiss the warning, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway**.
+
+Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
+
+Then open it, grant the permissions on its Permissions tab, and click **Take over hosting** on the Services tab. Add it to Login Items so it starts with your Mac. It runs the Theseus you installed above, so do the install first.
+
 Plugin install (inside Claude Code):
 ```
 /plugin marketplace add mgilardi/theseus
@@ -188,7 +206,7 @@ Either way, Theseus never posts to Slack.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
 ## What's next
-- **Theseus for Mac:** one download with a menu-bar app, a first-run wizard in place of Terminal, drag-to-rank, and the reply questionnaire as a native form (Tauri 2, same engine).
+- **Theseus for Mac, next steps:** one download with a first-run wizard in place of Terminal, drag-to-rank, and the reply questionnaire as a native form.
 - **Command center:** a wall or desk display (Raspberry Pi or any monitor, landscape or portrait), wall-safe by default.
 - **Voice and family (optional):** "show the family", "show my stuff", "in detail" (confirmed on your watch), and a family view for homes without Skylight.
 - Plans and milestones: [docs/APP-PLAN.md](docs/APP-PLAN.md). Decisions: [docs/adr](docs/adr).

@@ -144,7 +144,7 @@ crash, reboot or `--update`). Then:
 - **Where it runs:** by default (`remote_control.host: "terminal"`) the server runs in a **Terminal window titled "Theseus · Remote Control"**
   that a background watchdog reopens if it's closed. Minimize it, but keep it open. Running inside Terminal gives your phone sessions
   Terminal's permissions (texts, Calendar, Reminders, Notes), exactly like running `claude` from the command line. (`"background"` runs it
-  without a window, but macOS then checks Claude Code's own permissions; `"app"` is for the coming Theseus.app.)
+  without a window, but macOS then checks Claude Code's own permissions; `"app"` is for Theseus.app, section 11.)
 - The Mac needs to be awake and online (see "Keep the Mac awake"). If it isn't, your 📌 Today and ★ Master List notes still work on the phone.
 - Turn it off: set `"remote_control": {"enabled": false}` and run `engine/install.sh --unschedule`, then `--schedule` again. Logs: `logs/remote-control.log`.
 - Needs a recent Claude Code (Remote Control server mode). If it fails, update Claude Code first.
@@ -246,20 +246,23 @@ Every change is logged in `data/log.md`.
 └── bin/ek                    Calendar & Reminders bridge (built on install)
 ```
 
-## 11. The optional Mac app (preview builds)
-A native menu-bar app is planned. It's a window onto the same workspace: today's list, agenda, buttons for Status / What's next / Add,
-and A-or-B ranking cards. Until it's signed and notarized by Apple, preview builds are **unsigned**:
+## 11. Theseus for Mac (optional)
+A menu bar app that hosts Remote Control, the change checks and your briefings, so one set of macOS permissions covers all of them (ADR 0006).
+It runs the engine in your workspace, so install Theseus first.
 
-- **Easiest: build it yourself.** Open the project in Xcode and press Run. Apps you build on your own Mac open normally.
-- **Downloaded preview:** double-click it, and macOS will block it. Then go to **System Settings → Privacy & Security**, scroll to
-  **Security**, and click **Open Anyway** next to the app's name. Confirm with your password. (On macOS 15+, right-click → Open no
-  longer bypasses this, and the Open Anyway button only appears for about an hour after you try to open the app.)
-- Only do this for builds from this repo's official releases. Never disable Gatekeeper system-wide.
+1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
+2. Theseus is free and unsigned (Apple charges for signing), so macOS blocks the first launch. Allow it one of two ways:
 
-**How the app talks to Claude** (you choose in its settings; same engine either way):
-1. **"Use my Claude Code"**: the app starts your own installed `claude` in your Theseus folder, the same way the scheduled jobs do.
-   It never sees, stores or handles your Claude login. Usage counts against your own plan, under Anthropic's terms for `claude -p`.
-2. **"Use an API key"** (Anthropic's recommended route for apps): the app runs the same engine through Anthropic's Agent SDK with
-   *your own* Claude Console API key, stored in your Mac's Keychain. Billed per use to you.
-Anthropic's rules for third-party apps have been changing (see Anthropic's Claude Code "Legal and compliance" page and the help
-article "Use the Claude Agent SDK with your Claude plan"). The app follows whatever they currently allow.
+   **Terminal (quickest):**
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Theseus.app"
+   ```
+
+   **Or System Settings:** open the app and dismiss the warning, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway**.
+
+Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
+
+Only do this for builds from this repo's official releases. Never disable Gatekeeper system-wide.
+
+**Switching over:** open the app, add Theseus in each pane on the Permissions tab, click **Check access**, then **Take over hosting** on the Services tab. Add it to Login Items. Make sure the Claude desktop app isn't also serving your Theseus folder with Remote Control, because only one copy can. **Hand back to Terminal** undoes this. Build steps and details: [apps/desktop/README.md](../apps/desktop/README.md).
