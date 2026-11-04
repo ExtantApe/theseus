@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+- **Just open the app.** Once its permissions are in place, Theseus moves everything into the app by itself, with no click and without Claude or Terminal open. Until then its window opens and says what's missing. Handing back to Terminal stays handed back until you choose otherwise.
+- **ClickUp and Skylight sync on their own again.** Unattended runs can make the updates a sync needs: updating a ClickUp task, and adding, updating and completing Skylight chores, tasks and list items. Sending is still refused, and deleting still needs you.
+
 ## 0.5.0
 Everything from a full review of the app and engine. App, engine and plugin now share one version number.
 

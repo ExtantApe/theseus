@@ -159,7 +159,7 @@ When all of that is done, run `python3 engine/tools/app_edits.py done`. If a run
 **Editing `data/master.md`:** the app saves it as the user works. Read it right before changing it, make small targeted edits, and never write it back from an older copy.
 A `was:<section>` on a done item is where it came from, for the app's reopen. Leave it alone.
 
-**Connectors in unattended runs are read-only.** ClickUp, Skylight and any other connector can be read, but changing them needs a person to approve it, unless the user has allowed that exact tool in `.claude/settings.local.json`. If a run can't carry something out (a chore to complete, a ClickUp task to close), don't retry it. List it under ⚠️ Needs attention in the Today note, and do it in the next live session once the user says yes.
+**Connectors in unattended runs do what a sync needs, and nothing else.** ClickUp and Skylight can be read, and the changes that keep them in step with the list are allowed: updating a ClickUp task, and adding, updating and completing Skylight chores, tasks and list items. Nothing can send. Deleting, and anything else, needs a person. If a run can't carry something out, don't retry it. List it under ⚠️ Needs attention in the Today note, and do it in the next live session once the user says yes.
 
 `data/sync-map.json` links one task across systems:
 `{"t0042": {"reminder": "<ek id>", "skylight_item": "<id>", "clickup": "<id>", "person": "Sam Rivera", "email_to": "sam@example.com", "title": "…", "done": false}}`

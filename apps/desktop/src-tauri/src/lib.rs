@@ -35,6 +35,8 @@ struct Status {
     last_job: String,
     last_job_output: String,
     last_answer: String,    // the latest answer to something asked in the window; later syncs don't replace it
+    auto_host: bool,        // moves everything into the app by itself once it can
+    can_host: bool,         // has the permissions it needs to
     app_version: String,
     engine_version: String, // what's installed in the workspace; empty if it's too old to say
 }
@@ -351,13 +353,40 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Enough to run unattended: without these, briefings would come out empty. Notes can't be checked without a dialog, so its first use asks.
+fn can_host(s: &S) -> bool {
+    if s.claude.is_none() || !has_dev_tools() || !s.ws.join("config.json").exists() || fs::File::open(home().join("Library/Messages/chat.db")).is_err() {
+        return false;
+    }
+    let ek = Command::new(s.ws.join("bin/ek")).arg("status").current_dir(&s.ws).output().ok().and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok());
+    ek.map(|v| v["calendars"].as_str() == Some("ok") && v["reminders"].as_str() == Some("ok")).unwrap_or(false)
+}
+
 fn schedule_loop(s: S) {
     let mut last_check = Instant::now() - Duration::from_secs(3600);
+    let mut first = true;
     loop {
         if s.quitting.load(Ordering::SeqCst) {
             return;
         }
-        thread::sleep(Duration::from_secs(30));
+        if !first {
+            thread::sleep(Duration::from_secs(30));
+        }
+        first = false;
+
+        // Opening the app is all it takes: once it has its permissions, it moves everything in by itself, unless you've handed back.
+        let cfg = config(&s.ws);
+        let auto = cfg["auto_host"].as_bool() != Some(false);
+        let hosted = hosting(&cfg);
+        let able = hosted || can_host(&s);
+        set(&s, |st| { st.auto_host = auto; st.can_host = able; });
+        if !hosted && auto && able {
+            match take_over_now(&s) {
+                Ok(_) => log(&s.ws, "app.log", "moved everything into the app by itself"),
+                Err(e) => log(&s.ws, "app.log", &format!("couldn't move everything into the app: {e}")),
+            }
+            continue;
+        }
         let cfg = config(&s.ws);
         if cfg["scheduler_host"].as_str() != Some("app") || s.paused.load(Ordering::SeqCst) || !has_dev_tools() {
             continue;
@@ -691,13 +720,14 @@ fn uid() -> String {
     Command::new("/usr/bin/id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
 }
 
-fn set_hosts(ws: &Path, remote: &str, scheduler: &str) -> Result<(), String> {
+fn set_hosts(ws: &Path, remote: &str, scheduler: &str, auto: bool) -> Result<(), String> {
     let mut cfg = config(ws);
     if !cfg.is_object() {
         return Err("config.json not found in the workspace".into());
     }
     cfg["remote_control"]["host"] = Value::from(remote);
     cfg["scheduler_host"] = Value::from(scheduler);
+    cfg["auto_host"] = Value::from(auto);
     write_atomic(&ws.join("config.json"), &(serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())? + "\n"))
 }
 
@@ -705,8 +735,12 @@ fn set_hosts(ws: &Path, remote: &str, scheduler: &str) -> Result<(), String> {
 /// failure further down can't leave you with nothing running or with both running.
 #[tauri::command(async)]
 fn take_over(s: State<'_, S>) -> Result<String, String> {
+    take_over_now(&s)
+}
+
+fn take_over_now(s: &S) -> Result<String, String> {
     let ws = &s.ws;
-    set_hosts(ws, "app", "app")?;
+    set_hosts(ws, "app", "app", true)?;
     let uid = uid();
     let la = home().join("Library/LaunchAgents");
     let aside = ws.join("data/archive/launchagents");
@@ -723,7 +757,7 @@ fn take_over(s: State<'_, S>) -> Result<String, String> {
     }
     stop_old_servers(ws);
     install_watchdog(ws);
-    set(&s, |st| {
+    set(s, |st| {
         st.remote = "Waiting for the previous server to let go of this folder. This can take a few minutes, and it retries by itself.".into();
         st.remote_state = "waiting".into();
     });
@@ -735,7 +769,7 @@ fn take_over(s: State<'_, S>) -> Result<String, String> {
 #[tauri::command(async)]
 fn hand_back(s: State<'_, S>) -> Result<String, String> {
     let ws = &s.ws;
-    set_hosts(ws, "terminal", "launchd")?;
+    set_hosts(ws, "terminal", "launchd", false)?;
     stop_remote(&s);
     remove_watchdog();
     let uid = uid();
@@ -798,8 +832,11 @@ pub fn run() {
                 install_watchdog(&shared.ws);
             }
 
+            // Open on the first launch, and whenever it can't run yet, so nobody is left with only a menu bar icon.
             let seen = shared.ws.join("logs/.app-opened");
-            if !seen.exists() {
+            let cfg = config(&shared.ws);
+            let needs_setup = !hosting(&cfg) && cfg["auto_host"].as_bool() != Some(false) && !can_host(&shared);
+            if !seen.exists() || needs_setup {
                 let _ = fs::write(&seen, "");
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();

@@ -44,7 +44,7 @@ Wed 11/4: 9:00 All Hands
 **Tomorrow:** the registration.
 `;
 let file=MASTER, writes=0, publishes=0; const log=[], conflicts=[];
-const st={workspace:'~/Theseus',claude:'~/.local/bin/claude',hosting:true,paused:false,remote:'ok',remote_state:'running',last_check:'',job_running:null,last_job:'',last_job_output:'',last_answer:'',app_version:'0.5.0',engine_version:'0.5.0'};
+const st={workspace:'~/Theseus',claude:'~/.local/bin/claude',hosting:true,paused:false,remote:'ok',remote_state:'running',last_check:'',job_running:null,last_job:'',last_job_output:'',last_answer:'',app_version:'0.5.1',engine_version:'0.5.1',auto_host:true,can_host:true};
 const H={get_status:()=>st,read_today:()=>TODAY,read_master:()=>file,write_master:(a)=>{if(a.base!==file)throw 'conflict';file=a.text;writes++;log.push(...a.events);return null},save_conflict:(a)=>{conflicts.push(a.text);return 'data/archive/master-conflict-x.md'},publish_master:()=>{publishes++;return ''},run_now:()=>null,recent_runs:()=>[],schedule:()=>({days:[{}]}),permissions:()=>[]};
 const srv=http.createServer((q,r)=>{if(q.url==='/invoke'){let b='';q.on('data',d=>b+=d);q.on('end',()=>{const{cmd,args}=JSON.parse(b);try{r.end(JSON.stringify(H[cmd]?H[cmd](args):null))}catch(e){r.writeHead(500);r.end(String(e))}});return}
  const f=DIST+(q.url==='/'?'/index.html':q.url);if(!fs.existsSync(f)){r.writeHead(404);return r.end()}r.writeHead(200,{'content-type':f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':f.endsWith('.svg')?'image/svg+xml':'text/html'});r.end(fs.readFileSync(f))}).listen(0);
@@ -111,7 +111,7 @@ await p.click('.segmented >> text=List');await p.click('nav >> text=Today');{con
 // an answer stays when a later run finishes
 st.last_answer='Here is your answer';st.last_job_output='sync output';await p.fill('.ask input','what next');await p.keyboard.press('Enter');st.job_running='ask';await sleep(3300);st.job_running=null;await sleep(3300);ok('shows the answer, not the last job',await p.isVisible('text=Here is your answer'));
 // version check
-st.engine_version='0.4.0';await sleep(3300);ok('warns when the engine is out of date',await p.isVisible('text=install.sh --update'));st.engine_version='0.5.0';
+st.engine_version='0.4.0';await sleep(3300);ok('warns when the engine is out of date',await p.isVisible('text=install.sh --update'));st.engine_version='0.5.1';
 await sleep(100);ok('still no page errors',errs.length===0);if(errs.length)console.log(errs.slice(0,3));
 await b.close();srv.close();
 

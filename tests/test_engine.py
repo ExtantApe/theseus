@@ -97,7 +97,15 @@ class Guard(unittest.TestCase):
         hook = cfg["hooks"]["PreToolUse"][0]
         self.assertEqual(hook["matcher"], "mcp__.*")
         self.assertIn("|| exit 2", hook["hooks"][0]["command"])
-        self.assertFalse([r for r in cfg["permissions"]["allow"] if r.startswith("mcp__")])
+
+    def test_unattended_runs_can_sync_but_not_send_or_delete(self):
+        import send_guard
+        allowed = [r for r in json.loads((ROOT / "engine/templates/settings.json").read_text())["permissions"]["allow"] if r.startswith("mcp__")]
+        self.assertIn("mcp__clickup__clickup_update_task", allowed)
+        self.assertIn("mcp__skylight__skylight_complete_chore", allowed)
+        for rule in allowed:
+            self.assertEqual(rule.count("__"), 2, f"{rule} would allow a whole connector")
+            self.assertEqual(send_guard.classify(rule.split("__")[2]), "write", rule)
 
 
 class Workspace(unittest.TestCase):

@@ -24,7 +24,20 @@
       "WebFetch(domain:support.claude.com)",
       "WebSearch",
       "Bash(launchctl print:*)",
-      "Bash(pgrep:*)"
+      "Bash(pgrep:*)",
+      "mcp__clickup__clickup_update_task",
+      "mcp__skylight__skylight_complete_chore",
+      "mcp__skylight__skylight_complete_chore_instance",
+      "mcp__skylight__skylight_uncomplete_chore",
+      "mcp__skylight__skylight_create_chore",
+      "mcp__skylight__skylight_create_recurring_chore",
+      "mcp__skylight__skylight_update_chore",
+      "mcp__skylight__skylight_create_task",
+      "mcp__skylight__skylight_update_task",
+      "mcp__skylight__skylight_add_list_item",
+      "mcp__skylight__skylight_update_list_item",
+      "mcp__skylight__skylight_move_list_item",
+      "mcp__skylight__skylight_set_list_item_section"
     ],
     "ask": [
       "Bash(bin/ek delete:*)",

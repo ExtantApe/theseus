@@ -19,6 +19,8 @@ type Status = {
   last_job: string
   last_job_output: string
   last_answer: string
+  auto_host: boolean
+  can_host: boolean
   app_version: string
   engine_version: string
 }
@@ -114,6 +116,11 @@ export default function App() {
         {status && status.engine_version !== status.app_version && (
           <div className="page version-note">
             <div className="notice"><Icon name="alert" /><div>This is Theseus {status.app_version}, but your workspace has engine {status.engine_version || 'from before 0.5'}. Update it so they match: in your copy of Theseus, run <code>./install.sh --update</code>.</div></div>
+          </div>
+        )}
+        {status && !status.hosting && status.auto_host && !status.can_host && tab !== 'setup' && (
+          <div className="page version-note">
+            <div className="notice"><Icon name="info" /><div className="grow">Theseus runs by itself once it has its permissions.</div><button className="btn" onClick={() => setTab('setup')}>Open Setup</button></div>
           </div>
         )}
         {tab === 'today' && <Today status={status} onChange={refresh} m={master} a={actions} />}
@@ -337,7 +344,7 @@ function Activity({ status, onChange, onSetup }: { status: Status | null; onChan
       {!status.hosting && (
         <div className="notice">
           <Icon name="info" />
-          <div className="grow">Your Terminal window and background jobs are running things right now. Move them into this app so one set of permissions covers everything.</div>
+          <div className="grow">{status.auto_host ? 'Your Terminal window and background jobs are running things for now. Theseus moves them here by itself once it has its permissions.' : 'Your Terminal window and background jobs are running things, because you handed back. You can move them here again in Setup.'}</div>
           <button className="btn" onClick={onSetup}>Open Setup</button>
         </div>
       )}
@@ -460,7 +467,9 @@ function Setup({ status, onChange }: { status: Status | null; onChange: () => vo
               <div className="muted small">
                 {status.hosting
                   ? 'Remote Control, checks and briefings all run from here, so keep this app open. It lives in your menu bar.'
-                  : 'Move everything here so it all shares the permissions above. Nothing is deleted, and you can switch back.'}
+                  : status.auto_host
+                    ? 'Once the permissions above are allowed, Theseus moves everything here by itself, within a minute. You don\'t need Claude or Terminal open. Nothing is deleted, and you can switch back.'
+                    : 'You handed back, so this stays in Terminal until you move it here again. Nothing is deleted.'}
               </div>
               {!status.hosting && blocking > 0 && <div className="small" style={{ color: 'var(--warn)', marginTop: 3 }}>Allow the permissions above first, or briefings won't be able to read everything.</div>}
             </div>
