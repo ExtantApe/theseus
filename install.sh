@@ -140,24 +140,37 @@ PY
 }
 
 allow_connectors() {
-  # Scheduled runs can't answer permission prompts, so connector tools must be allowed up front. Personal, so it goes in settings.local.json.
-  local names; names="$(claude mcp list 2>/dev/null | sed -n 's/^\([A-Za-z0-9_.-]*\):.*/\1/p' | tr '\n' ' ')"
-  [[ -n "$names" ]] || { echo "(no connectors found with 'claude mcp list'; skipping)"; return; }
-  echo "Connectors found: $names"
-  python3 - "$WS" $names <<'PY'
-import sys, json, pathlib
-ws = pathlib.Path(sys.argv[1]); names = sys.argv[2:]
+  # Unattended runs can't answer permission prompts, so connector tools must be allowed up front. Personal, so it goes in settings.local.
+  # Anything that can send stays out: never-send is golden rule 1. Composio can do both, so only its discovery and run tools are allowed,
+  # and engine/tools/send_guard.py checks every action it runs.
+  local listing; listing="$(claude mcp list 2>/dev/null)"
+  [[ -n "$listing" ]] || { echo "(no connectors found with 'claude mcp list'; skipping)"; return; }
+  LISTING="$listing" python3 - "$WS" <<'PY'
+import sys, json, os, pathlib
+ws = pathlib.Path(sys.argv[1])
 p = ws / ".claude/settings.local.json"
 c = json.loads(p.read_text()) if p.exists() else {}
-perms = c.setdefault("permissions", {}); allow = perms.setdefault("allow", [])
-skip = {"slack"}   # Slack's connector can post; leave it out of auto-allow (ask instead)
-for n in names:
-    rule = f"mcp__{n}"
-    if n.lower() in skip:
-        print(f"  {n}: not auto-allowed (it can post). Allow it yourself if you want Slack read in scheduled runs.")
+allow = c.setdefault("permissions", {}).setdefault("allow", [])
+allow[:] = [r for r in allow if r != "mcp__plugin"]          # an old bug wrote this
+for line in os.environ["LISTING"].splitlines():
+    if ": " not in line or line.startswith("Checking"):
         continue
-    if rule not in allow:
-        allow.append(rule); print(f"  allowed in scheduled runs: {n}")
+    name = line.split(": ", 1)[0]
+    if name.startswith("plugin:"):
+        continue
+    if name == "claude.ai Composio":
+        rules = [f"mcp__claude_ai_Composio__COMPOSIO_{t}" for t in ("SEARCH_TOOLS", "GET_TOOL_SCHEMAS", "MULTI_EXECUTE_TOOL")]
+    elif name.startswith("claude.ai "):
+        print(f"  {name}: not auto-allowed (it may be able to send or change things). Allow it yourself if you want it in unattended runs.")
+        continue
+    elif "slack" in name.lower():
+        print(f"  {name}: not auto-allowed (it can post). Allow it yourself if you want Slack read in unattended runs.")
+        continue
+    else:
+        rules = ["mcp__" + name]
+    for r in rules:
+        if r not in allow:
+            allow.append(r); print("  allowed in unattended runs:", r)
 p.write_text(json.dumps(c, indent=2))
 PY
 }
@@ -211,7 +224,7 @@ case "$MODE" in
   install)    copy_engine; build_ek; checks || true
               echo; echo "✅ Theseus installed at $WS"
               echo "Next: cd \"$WS\" && claude   then run /theseus:setup (plugin) or follow docs/SETUP.md, then /migrate" ;;
-  --update)   copy_engine; build_ek
+  --update)   copy_engine; build_ek; allow_connectors
               if [[ $ON_MAC == 1 && -f "$HOME/Library/LaunchAgents/com.theseus.remote.plist" ]]; then
                 launchctl kickstart -k "gui/$(id -u)/com.theseus.remote" 2>/dev/null && echo "Restarted Remote Control so it uses the new engine."
               fi

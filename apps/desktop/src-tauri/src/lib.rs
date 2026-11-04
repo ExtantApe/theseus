@@ -28,6 +28,7 @@ struct Status {
     hosting: bool,          // config says the app hosts Remote Control and the schedule
     paused: bool,
     remote: String,         // human-readable state of the Remote Control server
+    remote_state: String,   // off | starting | running | waiting | error
     last_check: String,     // last change-check result
     job_running: Option<String>,
     last_job: String,
@@ -109,6 +110,11 @@ fn path_env() -> String {
     format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{}/.local/bin", home().display())
 }
 
+fn log_tail(p: &Path) -> String {
+    let t = fs::read_to_string(p).unwrap_or_default();
+    t.chars().rev().take(600).collect::<Vec<_>>().into_iter().rev().collect()
+}
+
 fn set<F: FnOnce(&mut Status)>(s: &S, f: F) {
     if let Ok(mut st) = s.status.lock() {
         f(&mut st);
@@ -178,10 +184,10 @@ fn remote_loop(s: S) {
                         let stdin = c.stdin.take().expect("piped stdin");
                         log(&s.ws, "remote-control.log", &format!("Theseus.app started Remote Control \"{}\"", name));
                         *s.remote.lock().unwrap() = Some(Remote { child: c, _stdin: stdin, started: Instant::now() });
-                        set(&s, |st| st.remote = "starting…".into());
+                        set(&s, |st| { st.remote = "Starting…".into(); st.remote_state = "starting".into(); });
                     }
                     Err(e) => {
-                        set(&s, |st| st.remote = format!("couldn't start: {e}"));
+                        set(&s, |st| { st.remote = format!("Couldn't start: {e}"); st.remote_state = "error".into(); });
                         wait_until = Instant::now() + Duration::from_secs(60);
                     }
                 }
@@ -192,17 +198,27 @@ fn remote_loop(s: S) {
                 *s.remote.lock().unwrap() = None;
                 let backoff = if quick { 60 } else { 5 };
                 log(&s.ws, "remote-control.log", &format!("Remote Control exited ({code}); retrying in {backoff}s"));
+                let tail = log_tail(&s.ws.join("logs/remote-control.log"));
                 set(&s, |st| {
-                    st.remote = if quick {
-                        "couldn't start: another copy (Terminal window or Claude desktop app) may be serving this folder".into()
+                    if !quick {
+                        st.remote = "Restarting…".into();
+                        st.remote_state = "starting".into();
+                    } else if tail.contains("served by a terminal") {
+                        st.remote = "Waiting for the previous server to let go of this folder. This can take a few minutes, and it retries by itself.".into();
+                        st.remote_state = "waiting".into();
+                    } else if tail.contains("served by the Claude app") {
+                        st.remote = "The Claude desktop app is serving this folder too, and only one can. Turn Remote Control off for this folder there, and this retries by itself.".into();
+                        st.remote_state = "waiting".into();
                     } else {
-                        "restarting…".into()
+                        st.remote = "Couldn't start. It retries by itself; the details are in logs/remote-control.log.".into();
+                        st.remote_state = "error".into();
                     }
                 });
                 wait_until = Instant::now() + Duration::from_secs(backoff);
             }
-            Some((Ok(None), up)) => set(&s, |st| st.remote = format!("running ({} min)", up.as_secs() / 60)),
-            Some((Err(e), _)) => set(&s, |st| st.remote = format!("unknown: {e}")),
+            Some((Ok(None), up)) if up >= Duration::from_secs(20) => set(&s, |st| { st.remote = "Your Mac is reachable from the Claude app's Code tab.".into(); st.remote_state = "running".into(); }),
+            Some((Ok(None), _)) => {}
+            Some((Err(e), _)) => set(&s, |st| { st.remote = format!("Unknown: {e}"); st.remote_state = "error".into(); }),
         }
         thread::sleep(Duration::from_secs(5));
     }
@@ -211,6 +227,11 @@ fn remote_loop(s: S) {
 // ---------- jobs (sync, morning, nightly, status) ----------
 
 fn prompt_for(kind: &str, reason: &str) -> String {
+    if kind == "ask" {
+        return format!(
+            "The user asked this in the Theseus app: \"{reason}\". Answer briefly and follow engine/RULES.md. If it's something to do or remember, add it to the list. Never send anything. This run can't ask follow-up questions, so make the sensible choice and say what you did."
+        );
+    }
     let wf = match kind {
         "morning" => "engine/workflows/morning.md",
         "nightly" => "engine/workflows/nightly.md",
@@ -320,12 +341,56 @@ fn get_status(s: State<'_, S>) -> Status {
 
 #[tauri::command]
 fn read_today(s: State<'_, S>) -> String {
-    fs::read_to_string(s.ws.join("data/today.md")).unwrap_or_else(|_| "No Today note yet. Run a status check.".into())
+    fs::read_to_string(s.ws.join("data/today.md")).unwrap_or_default()
 }
 
 #[tauri::command]
-fn run_now(kind: String, s: State<'_, S>) -> Result<(), String> {
-    run_job(&s, &kind, "started from Theseus.app")
+fn run_now(kind: String, text: Option<String>, s: State<'_, S>) -> Result<(), String> {
+    run_job(&s, &kind, text.as_deref().unwrap_or("started from Theseus.app"))
+}
+
+#[derive(Serialize)]
+struct Run {
+    file: String,
+    kind: String,
+    when: String,
+    bytes: u64,
+}
+
+/// Recent runs from the logs, whichever host ran them.
+#[tauri::command(async)]
+fn recent_runs(s: State<'_, S>) -> Vec<Run> {
+    let mut out = vec![];
+    if let Ok(dir) = fs::read_dir(s.ws.join("logs")) {
+        for e in dir.flatten() {
+            let f = e.file_name().to_string_lossy().to_string();
+            let Some(stem) = f.strip_suffix(".out") else { continue };
+            let stem = stem.strip_prefix("app-").unwrap_or(stem);
+            let Some((kind, when)) = stem.split_once('-') else { continue };
+            let bytes = e.metadata().map(|m| m.len()).unwrap_or(0);
+            if bytes > 0 {
+                out.push(Run { file: f.clone(), kind: kind.to_string(), when: when.replace('_', " "), bytes });
+            }
+        }
+    }
+    out.sort_by(|a, b| b.when.cmp(&a.when));
+    out.truncate(25);
+    out
+}
+
+#[tauri::command(async)]
+fn read_run(file: String, s: State<'_, S>) -> Result<String, String> {
+    if file.contains('/') || !file.ends_with(".out") {
+        return Err("Not a run log.".into());
+    }
+    fs::read_to_string(s.ws.join("logs").join(file)).map_err(|e| e.to_string())
+}
+
+/// When the next briefings are due, from the engine's schedule.
+#[tauri::command(async)]
+fn schedule(s: State<'_, S>) -> Value {
+    Command::new(PY).arg("engine/tools/schedule.py").current_dir(&s.ws).output().ok()
+        .and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(Value::Null)
 }
 
 #[tauri::command]
@@ -334,37 +399,60 @@ fn set_paused(paused: bool, s: State<'_, S>) {
 }
 
 #[derive(Serialize)]
-struct Check {
+struct Permission {
+    id: String,
     name: String,
-    ok: bool,
+    why: String,
+    state: String, // ok | ask | denied | unknown
     detail: String,
 }
 
-#[tauri::command]
-fn check_permissions(s: State<'_, S>) -> Vec<Check> {
-    let ws = &s.ws;
-    let run = |cmd: &str, args: &[&str]| -> (bool, String) {
-        match Command::new(cmd).args(args).current_dir(ws).env("PATH", path_env()).output() {
-            Ok(o) => {
-                let text = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
-                (o.status.success(), text.lines().take(6).collect::<Vec<_>>().join("\n"))
-            }
-            Err(e) => (false, e.to_string()),
-        }
-    };
+fn perm(id: &str, name: &str, why: &str, state: &str, detail: &str) -> Permission {
+    Permission { id: id.into(), name: name.into(), why: why.into(), state: state.into(), detail: detail.into() }
+}
+
+/// Where each permission stands. Nothing here shows a macOS dialog.
+#[tauri::command(async)]
+fn permissions(s: State<'_, S>) -> Vec<Permission> {
     let mut out = vec![];
-    let (ok, d) = run(PY, &["engine/tools/imsg.py", "--fresh", "doctor"]);
-    out.push(Check { name: "Texts & Contacts (Full Disk Access)".into(), ok: ok && !d.contains("saved copy"), detail: d });
-    let (ok, d) = run(ws.join("bin/ek").to_str().unwrap_or("bin/ek"), &["access"]);
-    out.push(Check { name: "Calendars & Reminders".into(), ok: ok && !d.contains("false"), detail: d });
-    let (ok, d) = run(PY, &["engine/tools/notes.py", "inbox"]);
-    out.push(Check { name: "Notes (Automation)".into(), ok, detail: d.chars().take(300).collect() });
-    out.push(Check {
-        name: "Claude Code".into(),
-        ok: s.claude.is_some(),
-        detail: s.claude.as_ref().map(|p| p.display().to_string()).unwrap_or("not found: install Claude Code".into()),
-    });
+    let fda = fs::File::open(home().join("Library/Messages/chat.db")).is_ok();
+    out.push(perm("files", "Full Disk Access", "To read your texts and Mail. You add Theseus to this list yourself; macOS never asks.", if fda { "ok" } else { "denied" }, ""));
+    let ek = Command::new(s.ws.join("bin/ek")).arg("status").current_dir(&s.ws).output().ok()
+        .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok());
+    for (id, name, why) in [
+        ("calendars", "Calendars", "To build your agenda and add events you ask for."),
+        ("reminders", "Reminders", "To keep your reminders in sync with your list."),
+    ] {
+        match ek.as_ref().and_then(|v| v[id].as_str()) {
+            Some(st) => out.push(perm(id, name, why, st, "")),
+            None => out.push(perm(id, name, why, "unknown", "Update the engine first: run ./install.sh --update from your copy of Theseus.")),
+        }
+    }
+    out.push(perm("notes", "Notes", "To read your inbox folder and keep your Today and Master List notes current.", "unknown", ""));
+    out.push(perm(
+        "claude",
+        "Claude Code",
+        "Theseus runs on your own Claude Code account.",
+        if s.claude.is_some() { "ok" } else { "denied" },
+        &s.claude.as_ref().map(|p| p.display().to_string()).unwrap_or("Not found. Install Claude Code, then reopen this app.".into()),
+    ));
     out
+}
+
+/// Make macOS show the dialog. It waits for your answer, up to two minutes, so it never runs on the window's thread.
+#[tauri::command(async)]
+fn request_permission(id: String, s: State<'_, S>) -> Result<String, String> {
+    let (cmd, args): (PathBuf, Vec<&str>) = match id.as_str() {
+        "calendars" | "reminders" => (s.ws.join("bin/ek"), vec!["access"]),
+        "notes" => (PathBuf::from(PY), vec!["engine/tools/notes.py", "inbox"]),
+        _ => return Err("macOS doesn't offer a dialog for this one.".into()),
+    };
+    let o = Command::new(cmd).args(args).current_dir(&s.ws).env("PATH", path_env()).output().map_err(|e| e.to_string())?;
+    if o.status.success() {
+        Ok(String::from_utf8_lossy(&o.stdout).chars().take(200).collect())
+    } else {
+        Err(String::from_utf8_lossy(&o.stderr).trim().chars().take(300).collect())
+    }
 }
 
 #[tauri::command]
@@ -374,29 +462,41 @@ fn open_privacy(pane: String) {
         "calendars" => "Privacy_Calendars",
         "reminders" => "Privacy_Reminders",
         "automation" => "Privacy_Automation",
+        "logins" => {
+            let _ = Command::new("/usr/bin/open").arg("x-apple.systempreferences:com.apple.LoginItems-Settings.extension").spawn();
+            return;
+        }
         _ => "Privacy",
     };
     let _ = Command::new("/usr/bin/open").arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}")).spawn();
 }
 
-/// Move hosting from Terminal/launchd to the app: set the config, stop the old jobs, and put their launch agents aside (reversibly).
-#[tauri::command]
-fn take_over(s: State<'_, S>) -> Result<String, String> {
-    let ws = &s.ws;
+const JOBS: [&str; 6] = ["remote", "morning", "nightly", "sync", "check", "channel"];
+
+fn uid() -> String {
+    Command::new("/usr/bin/id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+}
+
+fn set_hosts(ws: &Path, remote: &str, scheduler: &str) -> Result<(), String> {
     let mut cfg = config(ws);
     if !cfg.is_object() {
         return Err("config.json not found in the workspace".into());
     }
-    cfg["remote_control"]["host"] = Value::from("app");
-    cfg["scheduler_host"] = Value::from("app");
-    fs::write(ws.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap()).map_err(|e| e.to_string())?;
+    cfg["remote_control"]["host"] = Value::from(remote);
+    cfg["scheduler_host"] = Value::from(scheduler);
+    fs::write(ws.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap()).map_err(|e| e.to_string())
+}
 
-    let uid = Command::new("/usr/bin/id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+/// Move hosting from Terminal/launchd to the app. The old jobs stop first, so the app doesn't start a server only to have it killed.
+#[tauri::command(async)]
+fn take_over(s: State<'_, S>) -> Result<String, String> {
+    let ws = &s.ws;
+    let uid = uid();
     let la = home().join("Library/LaunchAgents");
     let aside = ws.join("data/archive/launchagents");
     let _ = fs::create_dir_all(&aside);
     let mut moved = vec![];
-    for job in ["remote", "morning", "nightly", "sync", "check", "channel"] {
+    for job in JOBS {
         let p = la.join(format!("com.theseus.{job}.plist"));
         if p.exists() {
             let _ = Command::new("/bin/launchctl").args(["bootout", &format!("gui/{uid}"), p.to_str().unwrap_or("")]).output();
@@ -405,26 +505,39 @@ fn take_over(s: State<'_, S>) -> Result<String, String> {
             }
         }
     }
-    // Stop a Remote Control server still running in a Terminal window (and the loop that restarts it).
     let _ = Command::new("/usr/bin/pkill").args(["-f", "Theseus Remote.command"]).output();
     let _ = Command::new("/usr/bin/pkill").args(["-f", "remote-control --name"]).output();
+    set_hosts(ws, "app", "app")?;
+    set(&s, |st| {
+        st.remote = "Waiting for the previous server to let go of this folder. This can take a few minutes, and it retries by itself.".into();
+        st.remote_state = "waiting".into();
+    });
     log(ws, "app.log", &format!("took over hosting; launch agents set aside: {moved:?}"));
-    Ok(format!(
-        "Theseus.app now hosts Remote Control and the schedule. Old background jobs set aside: {}. You can close the Terminal window.",
-        if moved.is_empty() { "none".into() } else { moved.join(", ") }
-    ))
+    Ok("Theseus now runs everything. Remote Control may take a few minutes to come back while the old server lets go.".into())
 }
 
-/// Give hosting back to Terminal/launchd (the launch agents come back on the next `engine/install.sh --schedule`).
-#[tauri::command]
+/// Give hosting back: the background jobs and the Terminal window return right away, so nothing is left unattended.
+#[tauri::command(async)]
 fn hand_back(s: State<'_, S>) -> Result<String, String> {
     let ws = &s.ws;
-    let mut cfg = config(ws);
-    cfg["remote_control"]["host"] = Value::from("terminal");
-    cfg["scheduler_host"] = Value::from("launchd");
-    fs::write(ws.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap()).map_err(|e| e.to_string())?;
+    set_hosts(ws, "terminal", "launchd")?;
     stop_remote(&s);
-    Ok("Hosting handed back. Run `bash ~/Theseus/engine/install.sh --schedule` in Terminal to restore the background jobs.".into())
+    let uid = uid();
+    let la = home().join("Library/LaunchAgents");
+    let aside = ws.join("data/archive/launchagents");
+    let mut back = vec![];
+    for job in JOBS {
+        let name = format!("com.theseus.{job}.plist");
+        let from = aside.join(&name);
+        let to = la.join(&name);
+        if from.exists() && !to.exists() && fs::rename(&from, &to).is_ok() {
+            let _ = Command::new("/bin/launchctl").args(["bootstrap", &format!("gui/{uid}"), to.to_str().unwrap_or("")]).output();
+            back.push(job);
+        }
+    }
+    set(&s, |st| { st.remote = "Running from Terminal.".into(); st.remote_state = "off".into(); });
+    log(ws, "app.log", &format!("handed hosting back; launch agents restored: {back:?}"));
+    Ok("Handed back. The background jobs and the Terminal window are running again.".into())
 }
 
 // ---------- app ----------
@@ -449,7 +562,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
-            get_status, read_today, run_now, set_paused, check_permissions, open_privacy, take_over, hand_back
+            get_status, read_today, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
@@ -517,7 +630,12 @@ pub fn run() {
                 } else if let Some(j) = st.job_running {
                     format!("Theseus: running {j}…")
                 } else {
-                    format!("Remote: {}", st.remote)
+                    match st.remote_state.as_str() {
+                        "running" => "Theseus: running".to_string(),
+                        "waiting" | "starting" => "Theseus: starting Remote Control…".to_string(),
+                        "error" => "Theseus: Remote Control needs a look".to_string(),
+                        _ => "Theseus".to_string(),
+                    }
                 };
                 let _ = status_item.set_text(line);
                 thread::sleep(Duration::from_secs(5));

@@ -36,5 +36,18 @@
       "Edit(~/Library/Messages/**)",
       "Edit(~/Library/Mail/**)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*COMPOSIO_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 engine/tools/send_guard.py"
+          }
+        ]
+      }
+    ]
   }
 }

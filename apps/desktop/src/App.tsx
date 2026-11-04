@@ -1,137 +1,416 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Icon, type IconName } from './ui/Icon'
+
+type Tab = 'today' | 'activity' | 'setup'
 type Status = {
-  workspace: string;
-  claude: string;
-  hosting: boolean;
-  paused: boolean;
-  remote: string;
-  last_check: string;
-  job_running: string | null;
-  last_job: string;
-  last_job_output: string;
-  runs_today: string[];
-};
-type Check = { name: string; ok: boolean; detail: string };
-type Tab = "today" | "services" | "permissions";
+  workspace: string
+  claude: string
+  hosting: boolean
+  paused: boolean
+  remote: string
+  remote_state: string
+  last_check: string
+  job_running: string | null
+  last_job: string
+  last_job_output: string
+  runs_today: string[]
+}
+type Run = { file: string; kind: string; when: string; bytes: number }
+type Permission = { id: string; name: string; why: string; state: 'ok' | 'ask' | 'denied' | 'unknown'; detail: string }
+type Section = { title: string; lines: string[] }
 
-const PANES: [string, string][] = [
-  ["files", "Full Disk Access"],
-  ["calendars", "Calendars"],
-  ["reminders", "Reminders"],
-  ["automation", "Automation (Notes)"],
-];
+const NAV: [Tab, string, IconName][] = [
+  ['today', 'Today', 'today'],
+  ['activity', 'Activity', 'activity'],
+  ['setup', 'Setup', 'setup'],
+]
+const JOB_WORDS: Record<string, string> = { status: 'Refreshing', sync: 'Syncing', morning: 'Morning briefing', nightly: 'Evening prep', ask: 'Thinking' }
+
+/** Turns the Today note's markdown into parts the screen can lay out. */
+function parseToday(md: string) {
+  const title = (md.match(/^# (.*)$/m)?.[1] ?? '').replace(/^[^\p{L}\p{N}]+/u, '')
+  const updated = md.match(/^_(Updated[^·_]*)/m)?.[1]?.trim() ?? ''
+  const sections: Section[] = []
+  let cur: Section | null = null
+  const lead: string[] = []
+  for (const line of md.split('\n')) {
+    if (line.startsWith('# ') || /^_Updated/.test(line)) continue
+    if (line.startsWith('## ')) {
+      cur = { title: line.slice(3).replace(/^[^\p{L}\p{N}]+/u, ''), lines: [] }
+      sections.push(cur)
+    } else if (line.trim()) {
+      ;(cur ? cur.lines : lead).push(line.trim())
+    }
+  }
+  return { title, updated, lead, sections }
+}
+
+/** **bold**, `code` and _italic_, safely, as React nodes. */
+function inline(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_)/g)
+  return parts.map((p, i) => {
+    if (p.startsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>
+    if (p.startsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>
+    if (p.length > 2 && p.startsWith('_') && p.endsWith('_')) return <i key={i}>{p.slice(1, -1)}</i>
+    return p
+  })
+}
+
+const isTodo = (l: string) => l.startsWith('☐')
+const noTodo = (l: string) => l.replace(/^☐\s*/, '')
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("today");
-  const [status, setStatus] = useState<Status | null>(null);
-  const [today, setToday] = useState("");
-  const [checks, setChecks] = useState<Check[] | null>(null);
-  const [msg, setMsg] = useState("");
-
-  const refresh = async () => {
-    setStatus(await invoke<Status>("get_status"));
-    setToday(await invoke<string>("read_today"));
-  };
+  const [tab, setTab] = useState<Tab>('today')
+  const [status, setStatus] = useState<Status | null>(null)
+  const refresh = useCallback(() => invoke<Status>('get_status').then(setStatus), [])
   useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
-  }, []);
+    void refresh()
+    const t = setInterval(refresh, 3000)
+    return () => clearInterval(t)
+  }, [refresh])
 
-  const act = async (fn: () => Promise<unknown>) => {
-    try {
-      const r = await fn();
-      setMsg(typeof r === "string" ? r : "Done.");
-    } catch (e) {
-      setMsg(String(e));
-    }
-    refresh();
-  };
+  const foot = !status
+    ? null
+    : status.job_running
+      ? { cls: 'warn', text: `${JOB_WORDS[status.job_running] ?? 'Working'}…` }
+      : status.paused
+        ? { cls: '', text: 'Paused' }
+        : status.hosting
+          ? status.remote_state === 'running'
+            ? { cls: 'ok', text: 'Running' }
+            : status.remote_state === 'error'
+              ? { cls: 'bad', text: 'Needs a look' }
+              : { cls: 'warn', text: 'Starting…' }
+          : { cls: '', text: 'Running from Terminal' }
 
   return (
-    <div className="app">
-      <header>
-        <h1>Theseus</h1>
-        <nav>
-          {(["today", "services", "permissions"] as Tab[]).map((t) => (
-            <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-              {t[0].toUpperCase() + t.slice(1)}
+    <div className="shell">
+      <aside className="side">
+        <div className="brand"><img src="/icon.svg" alt="" />Theseus</div>
+        <nav className="nav">
+          {NAV.map(([t, label, icon]) => (
+            <button key={t} aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
+              <Icon name={icon} />
+              {label}
             </button>
           ))}
         </nav>
-      </header>
+        {foot && <div className="side-foot"><span className={`pill ${foot.cls}`}><span className="dot" />{foot.text}</span></div>}
+      </aside>
+      <div className="main">
+        {tab === 'today' && <Today status={status} onChange={refresh} />}
+        {tab === 'activity' && <Activity status={status} onChange={refresh} onSetup={() => setTab('setup')} />}
+        {tab === 'setup' && <Setup status={status} onChange={refresh} />}
+      </div>
+    </div>
+  )
+}
 
-      {msg && <p className="msg" onClick={() => setMsg("")}>{msg}</p>}
+function Today({ status, onChange }: { status: Status | null; onChange: () => void }) {
+  const [md, setMd] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [asked, setAsked] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [showAttention, setShowAttention] = useState(false)
+  const [answered, setAnswered] = useState(false)
+  const running = status?.job_running ?? null
+  const was = useRef<string | null>(null)
+  const load = useCallback(() => invoke<string>('read_today').then(setMd), [])
+  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (was.current && !running) {
+      void load()
+      if (was.current === 'ask') setAnswered(true)
+    }
+    was.current = running
+  }, [running, load])
 
-      {tab === "today" && (
-        <section>
-          <div className="row">
-            <button disabled={!!status?.job_running} onClick={() => act(() => invoke("run_now", { kind: "status" }))}>
-              {status?.job_running ? `Running ${status.job_running}…` : "Run status now"}
-            </button>
-          </div>
-          <pre className="today">{today}</pre>
-        </section>
+  const today = useMemo(() => parseToday(md ?? ''), [md])
+  const run = (kind: string, words?: string) => {
+    setError('')
+    invoke('run_now', { kind, text: words }).then(onChange).catch((e) => setError(String(e)))
+  }
+  const ask = (q: string) => {
+    if (!q.trim()) return
+    setAsked(q.trim())
+    setAnswered(false)
+    setText('')
+    run('ask', q.trim())
+  }
+
+  const attention = today.sections.find((s) => /attention/i.test(s.title))
+  const now = today.sections.find((s) => /^now\b/i.test(s.title))
+  const rest = today.sections.filter((s) => s !== attention && s !== now && !/^jot/i.test(s.title) && s.lines.length)
+
+  return (
+    <div className="page">
+      <div className="head">
+        <div className="grow">
+          <h1>{today.title || 'Today'}</h1>
+          {today.updated && <div className="sub">{today.updated}</div>}
+        </div>
+        <button className="btn" disabled={!!running} onClick={() => run('status')}>
+          <Icon name="refresh" className={running === 'status' ? 'spin' : undefined} />
+          {running === 'status' ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+
+      <form className="ask" onSubmit={(e) => { e.preventDefault(); ask(text) }}>
+        <input type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask Theseus, or tell it something to remember" aria-label="Ask Theseus" />
+        <button className="btn" type="button" disabled={!!running} onClick={() => ask("I've got a few minutes. What's next?")}>What's next?</button>
+        <button className="btn primary icon" disabled={!!running || !text.trim()} aria-label="Send"><Icon name="send" /></button>
+      </form>
+
+      {error && <div className="notice bad"><Icon name="alert" /><div>{error}</div></div>}
+
+      {asked && (
+        <div className="card">
+          <div className="card-title">{asked}</div>
+          {answered
+            ? <div className="answer">{inline(status?.last_job_output.trim() ?? '')}</div>
+            : <div className="answer muted">Thinking…</div>}
+        </div>
       )}
 
-      {tab === "services" && status && (
-        <section>
-          {!status.hosting && (
-            <div className="card warn">
-              <p>
-                Theseus.app isn't hosting yet. Remote Control and the schedule still run from Terminal and background jobs.
-                Take over once you've granted permissions (Permissions tab).
-              </p>
-              <button onClick={() => act(() => invoke<string>("take_over"))}>Take over hosting</button>
-            </div>
-          )}
-          <dl>
-            <dt>Remote Control</dt><dd>{status.remote || "…"}</dd>
-            <dt>Last change check</dt><dd>{status.last_check || "none yet"}</dd>
-            <dt>Last run</dt><dd>{status.last_job || "none yet"}</dd>
-            <dt>Runs today</dt><dd>{status.runs_today.length ? status.runs_today.join(", ") : "none"}</dd>
-            <dt>Workspace</dt><dd>{status.workspace}</dd>
-            <dt>Claude Code</dt><dd>{status.claude}</dd>
-          </dl>
-          <div className="row">
-            <button onClick={() => act(() => invoke("set_paused", { paused: !status.paused }))}>
-              {status.paused ? "Resume" : "Pause"} checks and Remote Control
-            </button>
-            <button onClick={() => act(() => invoke("run_now", { kind: "sync" }))}>Sync now</button>
-            {status.hosting && (
-              <button className="quiet" onClick={() => act(() => invoke<string>("hand_back"))}>Hand back to Terminal</button>
-            )}
-          </div>
-          {status.last_job_output && <pre className="out">{status.last_job_output}</pre>}
-        </section>
+      {md === '' && (
+        <div className="card empty">
+          <Icon name="today" size={28} />
+          <h2>No Today note yet</h2>
+          <div>Refresh to gather your texts, email, calendar and reminders.</div>
+        </div>
       )}
 
-      {tab === "permissions" && (
-        <section>
-          <p>
-            Grant these to <b>Theseus</b> in System Settings. Everything Theseus starts (Remote Control, checks, briefings) uses
-            them.
-          </p>
-          <div className="row">
-            {PANES.map(([p, label]) => (
-              <button key={p} onClick={() => invoke("open_privacy", { pane: p })}>{label}…</button>
-            ))}
-          </div>
-          <button onClick={async () => setChecks(await invoke<Check[]>("check_permissions"))}>Check access</button>
-          {checks && (
-            <ul className="checks">
-              {checks.map((c) => (
-                <li key={c.name} className={c.ok ? "ok" : "bad"}>
-                  <b>{c.ok ? "✓" : "✗"} {c.name}</b>
-                  <pre>{c.detail}</pre>
-                </li>
+      {attention && attention.lines.length > 0 && (
+        <div className="card">
+          <button className="item click" onClick={() => setShowAttention(!showAttention)} aria-expanded={showAttention}>
+            <span style={{ color: 'var(--warn)', display: 'flex' }}><Icon name="alert" /></span>
+            <span className="grow">{attention.lines.length === 1 ? '1 thing needs attention' : `${attention.lines.length} things need attention`}</span>
+            <Icon name="chevron" className={`chev ${showAttention ? 'open' : ''}`} />
+          </button>
+          {showAttention && <div className="lines selectable">{attention.lines.map((l, i) => <div key={i}>{inline(l)}</div>)}</div>}
+        </div>
+      )}
+
+      {now && (
+        <div className="card">
+          <div className="card-title">Now</div>
+          <ol className="now selectable">
+            {now.lines.filter(isTodo).map((l, i) => <li key={i}><span className="rank">{i + 1}</span><span className="text">{inline(noTodo(l))}</span></li>)}
+          </ol>
+        </div>
+      )}
+
+      {today.lead.length > 0 && <div className="muted small">{today.lead.map((l, i) => <div key={i}>{inline(l)}</div>)}</div>}
+
+      {rest.length > 0 && (
+        <div className="sections">
+          {[0, 1].map((col) => (
+            <div className="column" key={col}>
+              {rest.filter((_, i) => i % 2 === col).map((s) => (
+                <div className="card" key={s.title}>
+                  <div className="card-title">{s.title}</div>
+                  <div className="lines selectable">
+                    {s.lines.map((l, i) => isTodo(l) ? <div className="todo" key={i}>{inline(noTodo(l))}</div> : <div key={i}>{inline(l)}</div>)}
+                  </div>
+                </div>
               ))}
-            </ul>
-          )}
-        </section>
+            </div>
+          ))}
+        </div>
       )}
     </div>
-  );
+  )
+}
+
+function twelve(hhmm?: string) {
+  if (!hhmm) return '—'
+  const [h, m] = hhmm.split(':').map(Number)
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
+}
+
+function Activity({ status, onChange, onSetup }: { status: Status | null; onChange: () => void; onSetup: () => void }) {
+  const [runs, setRuns] = useState<Run[]>([])
+  const [plan, setPlan] = useState<{ days?: { morning_run?: string; nightly_run?: string }[] } | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const [output, setOutput] = useState('')
+  useEffect(() => {
+    invoke<Run[]>('recent_runs').then(setRuns)
+    invoke<typeof plan>('schedule').then(setPlan)
+  }, [status?.last_job])
+  const show = (f: string) => {
+    if (open === f) return setOpen(null)
+    setOpen(f)
+    setOutput('')
+    invoke<string>('read_run', { file: f }).then(setOutput)
+  }
+  if (!status) return null
+  const pill = !status.hosting ? ['', 'From Terminal'] : status.remote_state === 'running' ? ['ok', 'Connected'] : status.remote_state === 'error' ? ['bad', 'Not connected'] : ['warn', 'Starting']
+  return (
+    <div className="page">
+      <div className="head">
+        <div className="grow">
+          <h1>Activity</h1>
+          <div className="sub">What Theseus is doing, and what it did last.</div>
+        </div>
+        {status.hosting && (
+          <button className="btn" onClick={() => invoke('set_paused', { paused: !status.paused }).then(onChange)}>
+            <Icon name={status.paused ? 'play' : 'pause'} />{status.paused ? 'Resume' : 'Pause'}
+          </button>
+        )}
+        <button className="btn" disabled={!!status.job_running} onClick={() => invoke('run_now', { kind: 'sync' }).then(onChange)}>
+          <Icon name="refresh" className={status.job_running === 'sync' ? 'spin' : undefined} />Sync now
+        </button>
+      </div>
+
+      {!status.hosting && (
+        <div className="notice">
+          <Icon name="info" />
+          <div className="grow">Your Terminal window and background jobs are running things right now. Move them into this app so one set of permissions covers everything.</div>
+          <button className="btn" onClick={onSetup}>Open Setup</button>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="item">
+          <Icon name="phone" />
+          <div className="grow"><div className="title">Remote Control</div><div className="muted small">{status.hosting ? status.remote || 'Starting…' : 'Your Mac is reachable from the Claude app while the Terminal window stays open.'}</div></div>
+          <span className={`pill ${pill[0]}`}><span className="dot" />{pill[1]}</span>
+        </div>
+        <div className="item">
+          <Icon name="clock" />
+          <div className="grow"><div className="title">Briefings</div><div className="muted small">Morning at {twelve(plan?.days?.[0]?.morning_run)}, evening prep at {twelve(plan?.days?.[0]?.nightly_run)}</div></div>
+        </div>
+        {status.hosting && status.last_check && (
+          <div className="item">
+            <Icon name="activity" />
+            <div className="grow"><div className="title">Last check</div><div className="muted small">{status.last_check}</div></div>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Recent runs</div>
+        {runs.length === 0 && <div className="item muted">Nothing has run yet.</div>}
+        {runs.map((r) => (
+          <div key={r.file}>
+            <button className="item click" onClick={() => show(r.file)} aria-expanded={open === r.file}>
+              <Icon name="chevron" className={`chev ${open === r.file ? 'open' : ''}`} />
+              <span className="grow title" style={{ textTransform: 'capitalize' }}>{r.kind}</span>
+              <span className="muted small num">{r.when}</span>
+            </button>
+            {open === r.file && <pre className="run-out">{output || 'Loading…'}</pre>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Setup({ status, onChange }: { status: Status | null; onChange: () => void }) {
+  const [perms, setPerms] = useState<Permission[] | null>(null)
+  const [waiting, setWaiting] = useState<string | null>(null)
+  const [tested, setTested] = useState<Record<string, boolean>>({})
+  const [error, setError] = useState('')
+  const [msg, setMsg] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => invoke<Permission[]>('permissions').then(setPerms), [])
+  useEffect(() => {
+    void load()
+    // Come back from System Settings and the list is already right.
+    window.addEventListener('focus', load)
+    return () => window.removeEventListener('focus', load)
+  }, [load])
+
+  const request = async (id: string) => {
+    setWaiting(id)
+    setError('')
+    try {
+      await invoke('request_permission', { id })
+      if (id === 'notes') setTested((t) => ({ ...t, notes: true }))
+    } catch (e) {
+      setError(String(e))
+    }
+    setWaiting(null)
+    void load()
+  }
+  const open = (pane: string) => invoke('open_privacy', { pane })
+  const host = async (cmd: 'take_over' | 'hand_back') => {
+    setBusy(true)
+    setError('')
+    try {
+      setMsg(await invoke<string>(cmd))
+    } catch (e) {
+      setError(String(e))
+    }
+    setBusy(false)
+    setConfirming(false)
+    onChange()
+  }
+
+  const stateOf = (p: Permission) => (tested[p.id] ? 'ok' : p.state)
+  const blocking = perms?.filter((p) => stateOf(p) === 'denied' || stateOf(p) === 'ask').length ?? 0
+
+  return (
+    <div className="page">
+      <div className="head"><div className="grow"><h1>Setup</h1><div className="sub">Permissions, and where Theseus runs.</div></div></div>
+      {error && <div className="notice bad"><Icon name="alert" /><div>{error}</div></div>}
+      {msg && <div className="notice"><Icon name="info" /><div>{msg}</div></div>}
+
+      <div className="card">
+        <div className="card-title">Permissions</div>
+        {!perms && <div className="item muted">Checking…</div>}
+        {perms?.map((p) => {
+          const st = stateOf(p)
+          return (
+            <div className="item perm" key={p.id}>
+              <div className="grow">
+                <div className="title">{p.name}</div>
+                <div className="muted small">{waiting === p.id ? 'Look for the macOS dialog and choose Allow.' : p.detail || p.why}</div>
+                {st === 'denied' && (p.id === 'calendars' || p.id === 'reminders') && <div className="small" style={{ color: 'var(--warn)', marginTop: 3 }}>It's turned off. Open Settings and switch Theseus on in the list.</div>}
+                {st === 'denied' && p.id === 'files' && <div className="small" style={{ color: 'var(--warn)', marginTop: 3 }}>Open Settings, click +, and choose Theseus in Applications. Then reopen Theseus.</div>}
+              </div>
+              {st === 'ok' && <span className="pill ok state"><Icon name="check" size={12} />{p.id === 'claude' ? 'Found' : 'Allowed'}</span>}
+              {st === 'ask' && <button className="btn primary state" disabled={!!waiting} onClick={() => request(p.id)}>{waiting === p.id ? 'Waiting…' : 'Allow…'}</button>}
+              {st === 'unknown' && p.id === 'notes' && <button className="btn state" disabled={!!waiting} onClick={() => request('notes')}>{waiting === 'notes' ? 'Waiting…' : 'Allow…'}</button>}
+              {st === 'denied' && p.id !== 'claude' && <button className="btn state" onClick={() => open(p.id)}><Icon name="open" />Open Settings</button>}
+            </div>
+          )
+        })}
+      </div>
+
+      {status && (
+        <div className="card">
+          <div className="card-title">Where Theseus runs</div>
+          <div className="item perm">
+            <div className="grow">
+              <div className="title">{status.hosting ? 'In this app' : 'In Terminal and background jobs'}</div>
+              <div className="muted small">
+                {status.hosting
+                  ? 'Remote Control, checks and briefings all run from here, so keep this app open. It lives in your menu bar.'
+                  : 'Move everything here so it all shares the permissions above. Nothing is deleted, and you can switch back.'}
+              </div>
+              {!status.hosting && blocking > 0 && <div className="small" style={{ color: 'var(--warn)', marginTop: 3 }}>Allow the permissions above first, or briefings won't be able to read everything.</div>}
+            </div>
+            {confirming ? (
+              <div className="row state">
+                <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
+                <button className="btn primary" disabled={busy} onClick={() => host(status.hosting ? 'hand_back' : 'take_over')}>{busy ? 'Switching…' : status.hosting ? 'Yes, hand back' : 'Yes, move here'}</button>
+              </div>
+            ) : (
+              <button className={`btn state ${status.hosting ? '' : 'primary'}`} onClick={() => setConfirming(true)}>{status.hosting ? 'Hand back to Terminal…' : 'Run from this app…'}</button>
+            )}
+          </div>
+          <div className="item perm">
+            <div className="grow"><div className="title">Open at login</div><div className="muted small">Add Theseus to Login Items so it starts with your Mac.</div></div>
+            <button className="btn state" onClick={() => open('logins')}><Icon name="open" />Open Settings</button>
+          </div>
+        </div>
+      )}
+
+      {status && <div className="muted small selectable">Workspace {status.workspace} · Claude Code {status.claude}</div>}
+    </div>
+  )
 }

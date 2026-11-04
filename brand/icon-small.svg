@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="ts">
+  <title id="ts">Theseus</title>
+  <!-- Small sizes (16–32 px): a larger tile and heavier lines. Use brand/icon.svg from 64 px up. -->
+  <defs><linearGradient id="gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17395a"/><stop offset="1" stop-color="#0c2540"/></linearGradient></defs>
+  <rect x="16" y="16" width="992" height="992" rx="220" fill="url(#gs)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#fbf8f2"><g transform="translate(-38 32)" stroke-width="84"><path d="M430 520V410H590V640H270V270H830"/></g></g>
+</svg>

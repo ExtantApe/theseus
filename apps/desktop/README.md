@@ -13,7 +13,7 @@ Needs Rust (`curl https://sh.rustup.rs -sSf | sh`), Node 20+, pnpm, and Xcode Co
 ```bash
 cd ~/Code/theseus
 pnpm install
-pnpm --filter theseus-desktop icons    # makes the icon set from app-icon.png
+pnpm --filter theseus-desktop icons    # makes the icon set from brand/icon-1024.png
 pnpm app:dev                           # run it in development
 pnpm app:build                         # → apps/desktop/src-tauri/target/release/bundle/macos/Theseus.app
 ```
@@ -23,9 +23,8 @@ Copy `Theseus.app` into `/Applications`, and grant permissions after moving it. 
 ## Switch over
 
 1. Open Theseus. A ship icon appears in the menu bar. Choose **Open Theseus**.
-2. **Permissions** tab: open each pane and add Theseus (Full Disk Access, Calendars, Reminders, Automation → Notes). Click
-   **Check access**. Everything should show ✓.
-3. **Services** tab: **Take over hosting**. This:
+2. **Setup**: click **Allow…** for Calendars, Reminders and Notes, and choose Allow in each macOS dialog. Full Disk Access is the one macOS never asks about: open Settings, click +, and choose Theseus.
+3. Still in **Setup**: **Run from this app…**. This:
    - sets `remote_control.host` and `scheduler_host` to `"app"` in `config.json`
    - stops the `com.theseus.*` launch agents and moves their plists to `data/archive/launchagents/`
    - closes the Terminal Remote Control window
@@ -33,7 +32,9 @@ Copy `Theseus.app` into `/Applications`, and grant permissions after moving it. 
 5. Make sure the **Claude desktop app isn't also serving `~/Theseus` with Remote Control**. Only one copy can, so the other
    one keeps failing.
 
-Changed your mind? **Hand back to Terminal**, then `bash ~/Theseus/engine/install.sh --schedule`.
+Changed your mind? **Hand back to Terminal** puts the background jobs and the Terminal window back.
+
+Remote Control can take a few minutes to return after switching, because the old server has to let go of the folder. The app says so and retries by itself.
 
 ## What it runs
 

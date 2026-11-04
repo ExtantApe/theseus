@@ -1,4 +1,4 @@
-<img src="apps/desktop/app-icon.png" width="96" alt="">
+<img src="brand/icon-1024.png" width="96" alt="">
 
 # Theseus
 ### Clears the path, so you can make the call.
@@ -120,7 +120,7 @@ A menu bar app that keeps everything running: Remote Control, the checks and you
 
 Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
 
-Then open it, grant the permissions on its Permissions tab, and click **Take over hosting** on the Services tab. Add it to Login Items so it starts with your Mac. It runs the Theseus you installed above, so do the install first.
+Then open it, allow what's listed on its Setup tab, then click **Run from this app…** there. Add it to Login Items so it starts with your Mac. It runs the Theseus you installed above, so do the install first.
 
 Plugin install (inside Claude Code):
 ```

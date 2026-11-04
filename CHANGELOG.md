@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- **Calendar permission fixed.** The app was built with Apple's hardened runtime and no calendar entitlement, so macOS refused silently: no dialog, and that pane has no + button. Reminders has no such gate, which is why it worked.
+- **New interface and icon.** A sidebar with Today, Activity and Setup; the Today note laid out as a real page; ask Theseus from the app; shared design system with Ariadne (`brand/README.md`). The icon is now a Greek key unwinding into a straight line.
+- **Setup** shows each permission's real state without prompting, and never freezes the window while a dialog is up.
+- **Hosting:** taking over stops the old jobs first and explains the wait while the old server lets go. Handing back restarts the background jobs right away, instead of leaving nothing running.
+- **Email in unattended runs:** connector detection missed every `claude.ai` connector, so Composio was never allowed. Fixed, with `engine/tools/send_guard.py` refusing anything that sends or deletes, and holding anything that isn't a plain read for a person to approve.
 - New identity: an Athenian ship in ivory on Aegean blue, a monochrome menu bar icon that follows light and dark mode, and matching colors in the app.
 - **Theseus for Mac is available** from Releases, built automatically. Every push now runs CI: leak check, script and Python checks, and an app build.
 - **Ariadne is a separate tool** (ADR 0005). Theseus doesn't move files. With `integrations.ariadne` on, a check-in offers a filing pass when `ariadne count` passes `checkin_offers.unfiled`.

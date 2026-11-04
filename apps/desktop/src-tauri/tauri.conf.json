@@ -14,9 +14,9 @@
       {
         "label": "main",
         "title": "Theseus",
-        "width": 960,
-        "height": 700,
-        "minWidth": 720,
+        "width": 1040,
+        "height": 720,
+        "minWidth": 760,
         "minHeight": 520,
         "visible": false
       }
@@ -41,7 +41,9 @@
     ],
     "macOS": {
       "minimumSystemVersion": "14.0",
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "hardenedRuntime": false,
+      "entitlements": "Entitlements.plist"
     }
   }
 }

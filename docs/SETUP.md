@@ -265,4 +265,4 @@ Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line 
 
 Only do this for builds from this repo's official releases. Never disable Gatekeeper system-wide.
 
-**Switching over:** open the app, add Theseus in each pane on the Permissions tab, click **Check access**, then **Take over hosting** on the Services tab. Add it to Login Items. Make sure the Claude desktop app isn't also serving your Theseus folder with Remote Control, because only one copy can. **Hand back to Terminal** undoes this. Build steps and details: [apps/desktop/README.md](../apps/desktop/README.md).
+**Switching over:** open the app, allow everything on the Setup tab, then click **Run from this app…**. Add it to Login Items. Make sure the Claude desktop app isn't also serving your Theseus folder with Remote Control, because only one copy can. **Hand back to Terminal** undoes this and restarts the background jobs. Build steps and details: [apps/desktop/README.md](../apps/desktop/README.md).

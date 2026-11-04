@@ -96,8 +96,7 @@ func requestAccess(_ type: EKEntityType) -> Bool {
 func ensure(_ type: EKEntityType) {
     if !requestAccess(type) {
         let what = type == .event ? "Calendars" : "Reminders"
-        fail("no access to \(what). System Settings → Privacy & Security → \(what) → enable your terminal app " +
-             "(Terminal/iTerm/etc.; for scheduled runs also enable /bin/bash or 'ek' if listed). Then rerun.", code: 2)
+        fail("no access to \(what). In Theseus.app, open Setup and allow it; or System Settings → Privacy & Security → \(what) → turn on the app running this (Theseus or Terminal). Then rerun.", code: 2)
     }
 }
 
@@ -204,6 +203,16 @@ func save(_ r: EKReminder) {
 
 // ---------- commands
 switch command {
+case "status":
+    // What macOS says right now. Never shows a dialog.
+    func word(_ t: EKEntityType) -> String {
+        let st = EKEventStore.authorizationStatus(for: t)
+        if st == .notDetermined { return "ask" }
+        if st == .denied || st == .restricted { return "denied" }
+        if #available(macOS 14.0, *), st == .writeOnly { return "denied" }
+        return "ok"
+    }
+    emit(["calendars": word(.event), "reminders": word(.reminder)])
 case "access":
     emit(["calendars": requestAccess(.event), "reminders": requestAccess(.reminder)])
 
