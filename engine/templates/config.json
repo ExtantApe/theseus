@@ -60,6 +60,7 @@
     "nightly_offset_minutes": -150,
     "adapt": true
   },
+  "job_time_limit_minutes": 45,
   "checks": {
     "enabled": false,
     "every_minutes": 5,

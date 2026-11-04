@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Block, ListTools, useListActions, type ListActions } from './ListUI'
-import { dropEmoji, findSection } from './master'
+import { commsSection, dropEmoji, nowSection } from './master'
 import { Icon, type IconName } from './ui/Icon'
 import { useMaster, type Master } from './useMaster'
 
@@ -18,7 +18,9 @@ type Status = {
   job_running: string | null
   last_job: string
   last_job_output: string
-  runs_today: string[]
+  last_answer: string
+  app_version: string
+  engine_version: string
 }
 type Run = { file: string; kind: string; when: string; bytes: number }
 type Permission = { id: string; name: string; why: string; state: 'ok' | 'ask' | 'denied' | 'unknown'; detail: string }
@@ -109,6 +111,11 @@ export default function App() {
         {foot && <div className="side-foot"><span className={`pill ${foot.cls}`}><span className="dot" />{foot.text}</span></div>}
       </aside>
       <div className="main">
+        {status && status.engine_version !== status.app_version && (
+          <div className="page version-note">
+            <div className="notice"><Icon name="alert" /><div>This is Theseus {status.app_version}, but your workspace has engine {status.engine_version || 'from before 0.5'}. Update it so they match: in your copy of Theseus, run <code>./install.sh --update</code>.</div></div>
+          </div>
+        )}
         {tab === 'today' && <Today status={status} onChange={refresh} m={master} a={actions} />}
         {tab === 'list' && <ListPage m={master} a={actions} />}
         {tab === 'activity' && <Activity status={status} onChange={refresh} onSetup={() => setTab('setup')} />}
@@ -192,8 +199,8 @@ function Today({ status, onChange, m, a }: { status: Status | null; onChange: ()
   const now = today.sections.find((s) => /^now\b/i.test(s.title))
   const waitingOn = today.sections.find((s) => /waiting on you/i.test(s.title))
   const rest = today.sections.filter((s) => s !== attention && s !== now && s !== waitingOn && !/^jot/i.test(s.title) && s.lines.length)
-  const liveNow = m.doc ? findSection(m.doc, 'now') : undefined
-  const liveComms = m.doc ? findSection(m.doc, 'communications') : undefined
+  const liveNow = m.doc ? nowSection(m.doc) : undefined
+  const liveComms = m.doc ? commsSection(m.doc) : undefined
 
   return (
     <div className="page">
@@ -221,7 +228,7 @@ function Today({ status, onChange, m, a }: { status: Status | null; onChange: ()
         <div className="card">
           <div className="card-title">{asked}</div>
           {answered
-            ? <div className="answer">{inline(status?.last_job_output.trim() ?? '')}</div>
+            ? <div className="answer">{inline(status?.last_answer.trim() ?? '')}</div>
             : <div className="answer muted">Thinking…</div>}
         </div>
       )}
@@ -467,8 +474,7 @@ function Setup({ status, onChange }: { status: Status | null; onChange: () => vo
             )}
           </div>
           <div className="item perm">
-            <div className="grow"><div className="title">Open at login</div><div className="muted small">Add Theseus to Login Items so it starts with your Mac.</div></div>
-            <button className="btn state" onClick={() => open('logins')}><Icon name="open" />Open Settings</button>
+            <div className="grow"><div className="title">Opening by itself</div><div className="muted small">{status.hosting ? 'Theseus opens at login and reopens after a crash. If you quit it from the menu bar, it stays closed until you open it or restart your Mac.' : 'Once it runs from this app, Theseus opens at login and reopens after a crash.'}</div></div>
           </div>
         </div>
       )}

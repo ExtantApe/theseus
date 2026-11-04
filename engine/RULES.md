@@ -65,7 +65,7 @@ instead of making it for them.
 | Slack, official connector (MCP `slack`, Claude Code sign-in) | the connector's read tools: DMs, mentions, threads waiting on the user (§10) | `slack` with `slack_source: "mcp"` |
 | Slack email bridge | the email account that receives Slack notifications (§10) | `slack_email_bridge` with `slack_source: "email"` |
 
-Use `--fresh` on imsg and mail whenever the user asks for status.
+Use `--fresh` on imsg and mail whenever the user asks for status. It goes before the subcommand: `python3 engine/tools/imsg.py --fresh missed`.
 Inside a Claude Code session macOS may block direct reads of
 Messages and Mail (it checks Claude Code's own permissions). The tools then fall back to the copies the background checks refresh every few
 minutes and print "note: using the saved copy … from N min ago". That's normal. Mention the age only if it's over 15 minutes, and never tell
@@ -145,15 +145,21 @@ To change a repeat: `bin/ek update --id … --recur "<RRULE>"`. To stop one: `--
 ## 3. Sync rules (every `/status`, `/sync`, `/inbox`, `/morning`, `/nightly`)
 
 **First, what the user did in Theseus.app.** The app edits `data/master.md` directly and logs each action in `data/app-edits.jsonl`, one JSON object per line
-(`action`: `complete`, `reopen`, `move`, `add`, `edit` or `undo`, with `id`, `title`, and for moves `from`, `to`, `above`). An `undo` line cancels the action in its `of` field, so
-net those out first. The list already shows these changes, so don't redo them; carry them to everything else:
+(`action`: `complete`, `reopen`, `move`, `add`, `edit`, `remove` or `undo`, with `id`, `title`, and for moves `from`, `to`, `above`). An `undo` line cancels the action in its `of` field, so
+net those out first. Get them with `python3 engine/tools/app_edits.py take`, never by reading and emptying the file yourself, because the user may be editing right now. The list already shows these changes, so don't redo them; carry them to everything else:
 - `complete` → complete the linked Reminder, Skylight item and ClickUp task (§3.2). The item is already in ✅ DONE. A repeating item is marked `done for now <date>`: complete
   that occurrence, remove the marker and update its due date.
 - `reopen` → reopen what's linked, if it was completed.
 - `move` → the user's own ranking. Record what it tells you about priorities (§8), the same as an A-or-B answer. Respect the new order and section.
 - `add` → a line with no `id:` and `#Inbox`: give it an id, a real category if one clearly fits, and sync it out like any new item.
 - `edit` → carry the new title to what's linked.
-Then append the lines to `data/archive/app-edits-YYYY-MM.jsonl` and empty `data/app-edits.jsonl`.
+- `remove` → the user deleted the line. Don't put it back. Ask before deleting what's linked.
+When all of that is done, run `python3 engine/tools/app_edits.py done`. If a run dies before then, the next `take` hands the same events over again.
+
+**Editing `data/master.md`:** the app saves it as the user works. Read it right before changing it, make small targeted edits, and never write it back from an older copy.
+A `was:<section>` on a done item is where it came from, for the app's reopen. Leave it alone.
+
+**Connectors in unattended runs are read-only.** ClickUp, Skylight and any other connector can be read, but changing them needs a person to approve it, unless the user has allowed that exact tool in `.claude/settings.local.json`. If a run can't carry something out (a chore to complete, a ClickUp task to close), don't retry it. List it under ⚠️ Needs attention in the Today note, and do it in the next live session once the user says yes.
 
 `data/sync-map.json` links one task across systems:
 `{"t0042": {"reminder": "<ek id>", "skylight_item": "<id>", "clickup": "<id>", "person": "Sam Rivera", "email_to": "sam@example.com", "title": "…", "done": false}}`

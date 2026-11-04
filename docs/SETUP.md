@@ -20,7 +20,7 @@ signed in with your own account, and Apple's developer tools (`xcode-select --in
 **Permissions** (macOS will ask; `/theseus:doctor` re-checks):
 | Permission | Why | Where |
 |---|---|---|
-| **Full Disk Access** | read Messages, Contacts, Apple Mail, Things (read-only snapshots) | System Settings → Privacy & Security → Full Disk Access → add your terminal app (Terminal, iTerm, Ghostty, VS Code…) **and `/bin/bash`** (⌘⇧G in the file picker) for scheduled runs. Quit and reopen the terminal. |
+| **Full Disk Access** | read Messages, Contacts, Apple Mail, Things (read-only snapshots) | System Settings → Privacy & Security → Full Disk Access → add the app you run Theseus from (Terminal, iTerm, Ghostty, VS Code…). If Remote Control runs in a Terminal window, that means Terminal, even if you usually use something else. Also add **`/bin/bash`** (⌘⇧G in the file picker) for scheduled runs. Quit and reopen the terminal. |
 | Calendars, Reminders | read and create events and reminders | click **Allow** on the prompts (or Privacy & Security → Calendars / Reminders) |
 | Automation → Notes | read your inbox folder, publish the master list | click **OK** on the prompt |
 
@@ -251,7 +251,7 @@ A menu bar app that hosts Remote Control, the change checks and your briefings, 
 It runs the engine in your workspace, so install Theseus first.
 
 1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
-2. Theseus is free and unsigned (Apple charges for signing), so macOS blocks the first launch. Allow it one of two ways:
+2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
 
    **Terminal (quickest):**
 
@@ -265,4 +265,4 @@ Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line 
 
 Only do this for builds from this repo's official releases. Never disable Gatekeeper system-wide.
 
-**Switching over:** open the app, allow everything on the Setup tab, then click **Run from this app…**. Add it to Login Items. Make sure the Claude desktop app isn't also serving your Theseus folder with Remote Control, because only one copy can. **Hand back to Terminal** undoes this and restarts the background jobs. Build steps and details: [apps/desktop/README.md](../apps/desktop/README.md).
+**Switching over:** open the app, allow everything on the Setup tab, then click **Run from this app…**. It then opens at login and reopens after a crash; quitting it from the menu bar keeps it closed until you open it or restart your Mac. Make sure the Claude desktop app isn't also serving your Theseus folder with Remote Control, because only one copy can. **Hand back to Terminal** undoes this and restarts the background jobs. Build steps and details: [apps/desktop/README.md](../apps/desktop/README.md).

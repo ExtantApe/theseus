@@ -8,7 +8,7 @@
 #              closed. Terminal is then the app in charge, so sessions get Terminal's permissions (Full Disk Access, Calendar,
 #              Reminders, Notes), exactly like running `claude` from the command line.
 #   "background": the server runs directly under launchd. No window, but macOS checks Claude Code's own permissions instead.
-#   "app": Theseus.app hosts it (planned); this job then does nothing.
+#   "app": Theseus.app hosts it; this job then does nothing.
 set -u
 WS="${THESEUS_HOME:-$HOME/Theseus}"
 CLAUDE_BIN="__CLAUDE_BIN__"

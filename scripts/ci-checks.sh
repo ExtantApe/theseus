@@ -8,10 +8,12 @@ PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 - <<'PY'
 import glob, json
 for f in glob.glob("engine/tools/*.py"):
     compile(open(f).read(), f, "exec")
-for f in ["engine/templates/config.json", "engine/templates/settings.json", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"]:
+for f in ["engine/templates/config.json", "engine/templates/settings.json", "engine/scheduled/prompts.json", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"]:
     json.load(open(f))
 PY
 swiftc -typecheck engine/tools/ek.swift
 node --test apps/desktop/src/*.test.ts
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/test_engine.py
+bash scripts/check-shared.sh
 cmp <(sed '/^SRC=/d' install.sh) <(sed '/^SRC=/d' engine/install.sh) || { echo "install.sh and engine/install.sh differ"; exit 1; }
 echo "✅ checks passed"

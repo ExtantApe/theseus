@@ -110,7 +110,7 @@ A menu bar app that keeps everything running: Remote Control, the checks and you
 It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo.
 
 1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
-2. Theseus is free and unsigned (Apple charges for signing), so macOS blocks the first launch. Allow it one of two ways:
+2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
 
    **Terminal (quickest):**
 
@@ -122,7 +122,7 @@ It's also the nicest way to work your list: drag things into order, check them o
 
 Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
 
-Then open it, allow what's listed on its Setup tab, then click **Run from this app…** there. Add it to Login Items so it starts with your Mac. It runs the Theseus you installed above, so do the install first.
+Then open it, allow what's listed on its Setup tab, then click **Run from this app…** there. From then on it opens at login and reopens after a crash. It runs the Theseus you installed above, so do the install first.
 
 Plugin install (inside Claude Code):
 ```
@@ -206,7 +206,7 @@ Either way, Theseus never posts to Slack.
 
 ## Privacy and safety
 - **Your data stays in your workspace** (`~/Theseus`): profile, config, list, drafts, exports. The engine (this repo) holds no personal data, and updates never touch your files.
-- Messages, Mail, Contacts and Things are read **read-only from snapshots**. Sending tools are blocked in the workspace settings. Every change Theseus makes is logged.
+- Messages, Mail, Contacts and Things are read **read-only from snapshots**. A hook on every connector (`engine/tools/send_guard.py`) refuses anything that sends, in every session, and unattended runs can only read connectors unless you allow a specific tool. Every change Theseus makes is logged.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
 ## What's next

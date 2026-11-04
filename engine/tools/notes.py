@@ -24,6 +24,8 @@ master_note_title, master_note_folder.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import fcntl
 import hashlib
 import html
 import json
@@ -31,6 +33,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 WS = Path(os.environ.get("THESEUS_HOME") or Path(__file__).resolve().parents[2])   # ~/Theseus (workspace)
@@ -50,6 +53,8 @@ function run(argv) {
     try { const a = Notes.accounts.byName(req.account); a.name(); return a; }
     catch (e) { return Notes.defaultAccount(); }
   }
+  // Only "that note doesn't exist" means missing. A slow or busy Notes must not look like a deleted note.
+  function notFound(e) { return e.errorNumber === -1728 || /\(-1728\)/.test(String(e)); }
   function child(container, name) {
     try { const f = container.folders.byName(name); f.name(); return f; } catch (e) { return null; }
   }
@@ -67,7 +72,8 @@ function run(argv) {
     return cur;
   }
   function info(n, withBody) {
-    const o = { id: n.id(), title: n.name(), modified: n.modificationDate().toISOString(),
+    const when = n.modificationDate();
+    const o = { id: n.id(), title: n.name(), modified: when.toISOString(), modified_ms: when.getTime(),
                 created: n.creationDate().toISOString(), locked: false };
     try { o.locked = n.passwordProtected(); } catch (e) {}
     if (withBody && !o.locked) { try { o.text = n.plaintext(); } catch (e) { o.text = null; o.error = String(e); } }
@@ -111,11 +117,11 @@ function run(argv) {
     }
     case 'get': {
       try { const n = Notes.notes.byId(r.id); return JSON.stringify(info(n, true)); }
-      catch (e) { return JSON.stringify({ missing: true }); }
+      catch (e) { if (notFound(e)) return JSON.stringify({ missing: true }); throw e; }
     }
     case 'upsert': {
       let n = null;
-      if (r.id) { try { n = Notes.notes.byId(r.id); n.name(); } catch (e) { n = null; } }
+      if (r.id) { try { n = Notes.notes.byId(r.id); n.name(); } catch (e) { if (!notFound(e)) throw e; n = null; } }
       if (!n) {
         const folder = folderAt(r.folder, true);
         n = Notes.make({ new: 'note', withProperties: { body: r.html }, at: folder });
@@ -132,8 +138,11 @@ function run(argv) {
 
 def jxa(req: dict):
     req.setdefault("account", ACCOUNT)
-    p = subprocess.run(["osascript", "-l", "JavaScript", "-e", JXA, json.dumps(req)],
-                       capture_output=True, text=True, timeout=180)
+    try:
+        p = subprocess.run(["osascript", "-l", "JavaScript", "-e", JXA, json.dumps(req)],
+                           capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        sys.exit("Notes didn't answer within 3 minutes. Nothing was changed; try again later.")
     if p.returncode != 0:
         err = p.stderr.strip()
         if "-1743" in err or "Not authorized" in err:
@@ -149,7 +158,20 @@ def load_state() -> dict:
 
 def save_state(s: dict):
     STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(s, indent=1))
+    fd, tmp = tempfile.mkstemp(dir=STATE.parent, prefix=".state.")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(s, indent=1))
+    os.replace(tmp, STATE)
+
+
+def record(key: str, rec: dict):
+    """The app and Claude both publish notes, so this rereads under a lock: neither can undo what the other just recorded."""
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    with open(STATE.parent / ".state.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        st = load_state()
+        st[key] = rec
+        save_state(st)
 
 
 def norm(t: str) -> str:
@@ -161,7 +183,7 @@ def h(t: str) -> str:
 
 # -------------------------------------------------------- markdown → Notes HTML
 
-ID_TOKEN = re.compile(r"\s*·?\s*\bid:[\w-]+")
+ID_TOKEN = re.compile(r"\s*·?\s*\b(?:id|was):[\w-]+")
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 
@@ -209,9 +231,31 @@ def md_to_html(md: str) -> str:
 
 # ------------------------------------------------------------------ commands
 
+COUNTS = re.compile(r"^_Updated [^\n]*_$", re.M)
+SECTION = re.compile(r"^##\s+\W*(NOW|NEXT|LATER|EVENTUALLY)\b", re.I)
+
+
+def fresh_counts(md: str) -> str:
+    """The list's "_Updated · 4 NOW · 9 NEXT_" line, recounted, because the app can publish between syncs."""
+    if not COUNTS.search(md):
+        return md
+    counts, cur = {}, None
+    for line in md.splitlines():
+        if line.startswith("## "):
+            m = SECTION.match(line)
+            cur = m.group(1).upper() if m else None
+            if cur:
+                counts.setdefault(cur, 0)
+        elif cur and re.match(r"^- \[ \]", line):
+            counts[cur] += 1
+    now = dt.datetime.now()
+    when = f"{now:%a} {now.month}/{now.day} {now.hour % 12 or 12}:{now:%M}{'am' if now.hour < 12 else 'pm'}"
+    parts = [when] + [f"{counts[k]} {k}" for k in ("NOW", "NEXT", "LATER", "EVENTUALLY") if k in counts]
+    return COUNTS.sub(lambda _: "_Updated " + " · ".join(parts) + "_", md, count=1)
+
+
 def upsert(key: str, title: str, md: str, folder: str, force: bool) -> dict:
-    st = load_state()
-    rec = st.get(key, {})
+    rec = load_state().get(key, {})
     if rec.get("id") and not force:
         cur = jxa({"cmd": "get", "id": rec["id"]})
         if not cur.get("missing") and cur.get("text") is not None and h(cur["text"]) != rec.get("hash"):
@@ -222,8 +266,7 @@ def upsert(key: str, title: str, md: str, folder: str, force: bool) -> dict:
             sys.exit(4)
     body_md = md if md.lstrip().startswith("# ") else f"# {title}\n\n{md}"
     res = jxa({"cmd": "upsert", "id": rec.get("id"), "folder": folder, "html": md_to_html(body_md)})
-    st[key] = {"id": res["id"], "hash": h(res.get("text", "")), "title": title, "folder": folder}
-    save_state(st)
+    record(key, {"id": res["id"], "hash": h(res.get("text", "")), "title": title, "folder": folder, "modified_ms": res.get("modified_ms")})
     return {"published": True, "title": res["title"], "id": res["id"], "folder": res.get("folder")}
 
 
@@ -264,12 +307,12 @@ def main():
             return
         cur = jxa({"cmd": "get", "id": rec["id"]})
         if cur.get("missing"):
-            print(json.dumps({"exists": False, "note": "master note was deleted; next publish recreates it"}))
+            print(json.dumps({"exists": False, "note": "this note was deleted; the next publish recreates it"}))
             return
         print(json.dumps({"exists": True, "edited_by_user": h(cur.get("text", "")) != rec.get("hash"),
                           "text": cur.get("text")}, indent=1, ensure_ascii=False))
     elif a.cmd == "master-publish":
-        md = Path(a.file).read_text()
+        md = fresh_counts(Path(a.file).read_text())
         print(json.dumps(upsert("master", MASTER_TITLE, md, MASTER_FOLDER, a.force), indent=1, ensure_ascii=False))
     elif a.cmd == "publish":
         md = Path(a.file).read_text()

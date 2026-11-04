@@ -6,6 +6,8 @@
       "Bash(python3 engine/tools/notes.py:*)",
       "Bash(python3 engine/tools/alarms.py:*)",
       "Bash(python3 engine/tools/things_export.py:*)",
+      "Bash(python3 engine/tools/schedule.py:*)",
+      "Bash(python3 engine/tools/app_edits.py:*)",
       "Bash(bin/ek:*)",
       "Bash(ariadne count:*)",
       "Bash(ariadne rules:*)",
@@ -34,17 +36,22 @@
       "Bash(shortcuts run:*)",
       "Bash(sqlite3 ~/Library/Messages:*)",
       "Edit(~/Library/Messages/**)",
-      "Edit(~/Library/Mail/**)"
+      "Edit(~/Library/Mail/**)",
+      "mcp__clickup__clickup_send_chat_message",
+      "mcp__clickup__clickup_create_comment",
+      "mcp__clickup__clickup_create_task_comment",
+      "mcp__slack__slack_send_message",
+      "mcp__slack__slack_post_message"
     ]
   },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*COMPOSIO_.*",
+        "matcher": "mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 engine/tools/send_guard.py"
+            "command": "/usr/bin/python3 \"$CLAUDE_PROJECT_DIR/engine/tools/send_guard.py\" || exit 2"
           }
         ]
       }

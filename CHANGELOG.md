@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+Everything from a full review of the app and engine. App, engine and plugin now share one version number.
+
+**Never sends, enforced**
+- The send guard now covers every connector, not just Composio, in every session. A write hiding behind a read word (`FIND_OR_CREATE`, `LIST_ADD_MEMBER`) no longer counts as a read, and if the guard can't decide, the call is blocked instead of going ahead.
+- **Unattended runs only read ClickUp, Skylight and other connectors.** They used to be able to send ClickUp messages and delete Skylight items. Changing something now needs a live session, or you can allow one exact tool in `.claude/settings.local.json`. `--update` moves existing workspaces over.
+
+**Nothing lost**
+- A detected change stays on the books until its sync finishes, so a failed or skipped run is retried instead of waiting for the hourly refresh.
+- What you do in the app reaches the next sync only once it's saved, and anything you do during a sync waits for the next one (`engine/tools/app_edits.py`). Completing something in the Markdown view now counts.
+- `config.json` and `state.json` are written whole, under a lock where two programs share them. Taking over no longer reorders `config.json`.
+- If a sync lands while you're typing, what you typed is saved in `data/archive`, and undo can't overwrite the sync.
+- Reopening a checked-off item puts it back in the section it came from. Items with the same title no longer get mixed up.
+- A slow Notes app no longer looks like a deleted note, so it can't create a duplicate Today note or lose your pin.
+- Contact names work in Claude Code sessions again, using the saved copies.
+- Theseus's own Today note update no longer starts another run every 15 minutes.
+- The list note's counts stay right, and failures to update it are shown.
+
+**Running from the app**
+- A briefing missed while the Mac slept runs when it wakes. Restarting doesn't send it twice, and an evening run set after midnight fires on the right night.
+- A run that hangs is stopped after 45 minutes (`job_time_limit_minutes`), under launchd too.
+- Theseus opens at login and reopens after a crash, once it hosts. Quitting from the menu bar is respected.
+- Taking over stops only this workspace's Remote Control server, not other projects', changes the config first so a failure can't strand you, and leaves the iMessage channel running.
+- Both hosts share prompts, log cleanup and opening helper apps. Logging out stops Remote Control cleanly.
+- **Releases are signed with a stable certificate, so updates keep your macOS permissions.** This release asks for them one last time.
+- The app warns when the engine doesn't match it, finds a workspace that isn't `~/Theseus` when opened from Finder, and checks for Apple's command line tools.
+
+**The window**
+- Renaming a section no longer makes its block disappear. Your answer stays when a later run finishes. A drag released outside the window ends, and closing the window finishes any check-off in its countdown. Old list backups are removed after 14 days.
+
+**Installer and tests**
+- `--update` now reaches the scripts launchd runs, and no longer re-adds connectors you took out.
+- New: `tests/test_engine.py` and browser tests of the window in `apps/desktop/e2e`, both run by CI, plus a check that files shared with Ariadne stay identical. CI's leak check can use your private terms through the `LEAK_TERMS` secret.
+
+## Before 0.5.0
 - **Edit your list in the app.** A new List page, and live Now and Communication blocks on Today, both working on `data/master.md`. Drag to reorder or move between sections, double-click to rename, or switch to a raw Markdown view. It saves as you go, with undo and redo (⌘Z, ⇧⌘Z) and an hourly backup in `data/archive`. A sync that changes the file at the same time is merged, not overwritten.
 - **Checking something off** gives you three seconds to change your mind, then it moves to Done. Repeating items stay put, marked done for now.
 - The next sync carries what you did to Reminders, Skylight and ClickUp, and treats your drags as your own ranking instead of re-sorting them (`data/app-edits.jsonl`, RULES §3).

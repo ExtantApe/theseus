@@ -1,6 +1,8 @@
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react'
 
-import { addItem, type Chip, complete, dropEmoji, editTitle, findItem, type Item, items, moveItem, parse, reopen, type Section } from './master'
+import { listen } from '@tauri-apps/api/event'
+
+import { addItem, type Chip, complete, dropEmoji, editTitle, findItem, isDoneKey, type Item, items, moveItem, parse, reopen, type Section } from './master'
 import { Icon, type IconName } from './ui/Icon'
 import { startRowDrag } from './ui/useDrag'
 import type { Master } from './useMaster'
@@ -8,9 +10,9 @@ import type { Master } from './useMaster'
 export const GRACE_MS = 3000
 
 const SECTION_ICONS: Record<string, IconName> = { now: 'flame', communications: 'message', next: 'skipForward', later: 'calendar', eventually: 'lightbulb', 'figure out': 'puzzle', 'waiting on': 'hourglass', projects: 'folder', done: 'circleCheck' }
-export const sectionIcon = (key: string): IconName => SECTION_ICONS[key] ?? 'list'
+export const sectionIcon = (key: string): IconName => SECTION_ICONS[key] ?? (key.startsWith('comm') ? 'message' : isDoneKey(key) ? 'circleCheck' : 'list')
 export function sectionName(key: string, title: string) {
-  if (key === 'communications') return 'Communication'
+  if (key.startsWith('comm')) return 'Communication'
   return title.charAt(0).toUpperCase() + title.slice(1).toLowerCase()
 }
 
@@ -18,7 +20,7 @@ export function sectionName(key: string, title: string) {
 export function useListActions(m: Master) {
   const [waiting, setWaiting] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState('')
-  const timers = useRef(new Map<string, number>())
+  const timers = useRef(new Map<string, { timer: number; finish: () => void }>())
   const toastTimer = useRef(0)
   const say = useCallback((t: string) => {
     setToast(t)
@@ -30,7 +32,7 @@ export function useListActions(m: Master) {
     const id = it.key
     if (timers.current.has(id)) {
       // A second click inside the grace period: nothing happened.
-      window.clearTimeout(timers.current.get(id))
+      window.clearTimeout(timers.current.get(id)?.timer)
       timers.current.delete(id)
       setWaiting((w) => { const n = new Set(w); n.delete(id); return n })
       return
@@ -40,13 +42,27 @@ export function useListActions(m: Master) {
       return
     }
     setWaiting((w) => new Set(w).add(id))
-    timers.current.set(id, window.setTimeout(() => {
+    const finish = () => {
       timers.current.delete(id)
       setWaiting((w) => { const n = new Set(w); n.delete(id); return n })
-      m.apply((md) => complete(md, id), { action: 'complete', id: it.id, title: it.title, repeating: it.repeating })
-      say(it.repeating ? `${dropEmoji(it.title)}: done for now` : `${dropEmoji(it.title)} moved to Done`)
-    }, GRACE_MS))
+      const changed = m.apply((md) => complete(md, id), { action: 'complete', id: it.id, title: it.title, repeating: it.repeating })
+      if (!changed) say(`Couldn't find ${dropEmoji(it.title)} any more, so nothing was checked off`)
+      else say(it.repeating ? `${dropEmoji(it.title)}: done for now` : `${dropEmoji(it.title)} moved to Done`)
+    }
+    timers.current.set(id, { timer: window.setTimeout(finish, GRACE_MS), finish })
   }, [m, say])
+
+  // Closing the window or quitting: finish anything in its countdown now, rather than lose it or leave it to a paused timer.
+  useEffect(() => {
+    const unlisten = listen('commit-now', () => {
+      for (const { timer, finish } of [...timers.current.values()]) {
+        window.clearTimeout(timer)
+        finish()
+      }
+      void m.flush()
+    })
+    return () => { void unlisten.then((stop) => stop()) }
+  }, [m])
 
   const move = useCallback((id: string, to: string, before: string | null) => {
     m.apply((md) => moveItem(md, id, to, before), (was) => {
@@ -77,7 +93,7 @@ export function Row({ it, section, m, a, siblings }: { it: Item; section: Sectio
   const [draft, setDraft] = useState('')
   const inGrace = a.waiting.has(it.key)
   const checked = it.done || it.doneForNow || inGrace
-  const startEdit = () => { setDraft(it.title); setEditing(true) }
+  const startEdit = () => { if (!inGrace) { setDraft(it.title); setEditing(true) } }
   const commit = () => {
     setEditing(false)
     if (draft.trim() && draft.trim() !== it.title) m.apply((md) => editTitle(md, it.key, draft), { action: 'edit', id: it.id, title: draft.trim(), was: it.title })
@@ -162,7 +178,7 @@ export function Block({ section, m, a, footer, collapsible, defaultOpen = true, 
         <>
           {list.map((it) => <Row key={it.key} it={it} section={section} m={m} a={a} siblings={list} />)}
           {list.length === 0 && <div className="block-empty muted small">Nothing here. Drag something in, or add it.</div>}
-          {section.key !== 'done' && <AddRow section={section} m={m} />}
+          {!isDoneKey(section.key) && <AddRow section={section} m={m} />}
           {footer}
         </>
       )}

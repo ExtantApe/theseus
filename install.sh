@@ -22,7 +22,7 @@ if [[ $ON_MAC == 0 && -z "${THESEUS_SKIP_MAC:-}" ]]; then echo "Theseus runs on 
 
 uid() { id -u; }
 if [[ "$MODE" == "--unschedule" ]]; then
-  for j in morning nightly sync check channel remote; do
+  for j in morning nightly sync check channel remote watchdog; do
     p="$HOME/Library/LaunchAgents/com.theseus.$j.plist"
     launchctl bootout "gui/$(uid)" "$p" 2>/dev/null || true; rm -f "$p"
   done
@@ -52,6 +52,45 @@ copy_engine() {
   [[ -e "$WS/CLAUDE.md" ]]   || cp "$WS/engine/templates/CLAUDE.md"   "$WS/CLAUDE.md"
   printf 'cache/\nexports/\nlogs/\nbriefings/\ndata/\nprofile.md\nconfig.json\nbin/\n' > "$WS/.gitignore"
   chmod +x "$WS/engine/tools/"*.py "$WS/engine/scheduled/"*.sh 2>/dev/null || true
+  # Theseus.app starts from Finder without your shell's THESEUS_HOME, so this is how it finds a workspace that isn't ~/Theseus.
+  mkdir -p "$HOME/Library/Application Support/Theseus" && printf '%s\n' "$WS" > "$HOME/Library/Application Support/Theseus/workspace"
+}
+
+refresh_bin() {
+  # The scripts launchd runs live in bin/ with Claude's path filled in. Without this, an update wouldn't reach them.
+  local CLAUDE_BIN; CLAUDE_BIN="$(command -v claude || true)"; [[ -n "$CLAUDE_BIN" ]] || return 0
+  for f in run-job run-remote run-channel; do
+    if [[ -f "$WS/bin/$f.sh" ]]; then
+      sed -e "s#__CLAUDE_BIN__#$CLAUDE_BIN#" "$WS/engine/scheduled/$f.sh" > "$WS/bin/$f.sh" && chmod +x "$WS/bin/$f.sh"
+    fi
+  done
+}
+
+migrate_connectors() {
+  # Connectors used to be allowed whole, which let unattended runs change and delete things. Reads now go through send_guard.py and config.json.
+  python3 - "$WS" <<'PY'
+import json, os, pathlib, sys, tempfile
+ws = pathlib.Path(sys.argv[1])
+p = ws / ".claude/settings.local.json"
+if not p.exists():
+    sys.exit(0)
+c = json.loads(p.read_text())
+allow = c.get("permissions", {}).get("allow", [])
+whole = [r for r in allow if r.startswith("mcp__") and "__" not in r[5:]]
+if not whole:
+    sys.exit(0)
+allow[:] = [r for r in allow if r not in whole]
+p.write_text(json.dumps(c, indent=2) + "\n")
+cp = ws / "config.json"; cfg = json.loads(cp.read_text())
+names = cfg.setdefault("unattended_read_connectors", [])
+names.extend(n for n in (r[5:] for r in whole if r != "mcp__plugin") if n not in names)
+fd, tmp = tempfile.mkstemp(dir=ws, prefix=".config.")
+with os.fdopen(fd, "w") as f:
+    f.write(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+os.replace(tmp, cp)
+print("Connectors are now read-only in unattended runs:", ", ".join(names))
+print("To let one change something unattended, allow that exact tool in .claude/settings.local.json.")
+PY
 }
 
 build_ek() {
@@ -140,38 +179,45 @@ PY
 }
 
 allow_connectors() {
-  # Unattended runs can't answer permission prompts, so connector tools must be allowed up front. Personal, so it goes in settings.local.
-  # Anything that can send stays out: never-send is golden rule 1. Composio can do both, so only its discovery and run tools are allowed,
-  # and engine/tools/send_guard.py checks every action it runs.
+  # Unattended runs can't answer permission prompts, so they get plain reads from the connectors you have. send_guard.py lets those through
+  # and refuses anything that sends; anything else needs a person. Composio can do both, so only its discovery and run tools are allowed, and
+  # send_guard.py checks every action it runs. Connectors you've taken out stay out: the first run lists them, and later runs only mention new ones.
   local listing; listing="$(claude mcp list 2>/dev/null)"
   [[ -n "$listing" ]] || { echo "(no connectors found with 'claude mcp list'; skipping)"; return; }
   LISTING="$listing" python3 - "$WS" <<'PY'
-import sys, json, os, pathlib
+import json, os, pathlib, re, sys, tempfile
 ws = pathlib.Path(sys.argv[1])
+names = []
+for line in os.environ["LISTING"].splitlines():
+    m = re.match(r"^(.+?): .+ - \S", line)      # "name: target - status"
+    if m:
+        names.append(m.group(1))
 p = ws / ".claude/settings.local.json"
 c = json.loads(p.read_text()) if p.exists() else {}
 allow = c.setdefault("permissions", {}).setdefault("allow", [])
-allow[:] = [r for r in allow if r != "mcp__plugin"]          # an old bug wrote this
-for line in os.environ["LISTING"].splitlines():
-    if ": " not in line or line.startswith("Checking"):
-        continue
-    name = line.split(": ", 1)[0]
-    if name.startswith("plugin:"):
-        continue
-    if name == "claude.ai Composio":
-        rules = [f"mcp__claude_ai_Composio__COMPOSIO_{t}" for t in ("SEARCH_TOOLS", "GET_TOOL_SCHEMAS", "MULTI_EXECUTE_TOOL")]
-    elif name.startswith("claude.ai "):
-        print(f"  {name}: not auto-allowed (it may be able to send or change things). Allow it yourself if you want it in unattended runs.")
-        continue
-    elif "slack" in name.lower():
-        print(f"  {name}: not auto-allowed (it can post). Allow it yourself if you want Slack read in unattended runs.")
-        continue
-    else:
-        rules = ["mcp__" + name]
-    for r in rules:
+if "claude.ai Composio" in names:
+    for t in ("SEARCH_TOOLS", "GET_TOOL_SCHEMAS", "MULTI_EXECUTE_TOOL"):
+        r = f"mcp__claude_ai_Composio__COMPOSIO_{t}"
         if r not in allow:
-            allow.append(r); print("  allowed in unattended runs:", r)
-p.write_text(json.dumps(c, indent=2))
+            allow.append(r)
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(c, indent=2) + "\n")
+cp = ws / "config.json"; cfg = json.loads(cp.read_text())
+local = [n for n in names if not n.startswith(("plugin:", "claude.ai ")) and "slack" not in n.lower()]
+if "unattended_read_connectors" in cfg:
+    new = [n for n in local if n not in cfg["unattended_read_connectors"]]
+    if new:
+        print("  New connectors, not read in unattended runs until you add them to unattended_read_connectors in config.json:", ", ".join(new))
+else:
+    cfg["unattended_read_connectors"] = local
+    fd, tmp = tempfile.mkstemp(dir=ws, prefix=".config.")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, cp)
+    print("  Read in unattended runs:", ", ".join(local) or "none")
+for n in names:
+    if (n.startswith("claude.ai ") and n != "claude.ai Composio") or "slack" in n.lower():
+        print(f"  {n}: not read in unattended runs. To add it, put its name in unattended_read_connectors in config.json.")
 PY
 }
 
@@ -224,7 +270,7 @@ case "$MODE" in
   install)    copy_engine; build_ek; checks || true
               echo; echo "✅ Theseus installed at $WS"
               echo "Next: cd \"$WS\" && claude   then run /theseus:setup (plugin) or follow docs/SETUP.md, then /migrate" ;;
-  --update)   copy_engine; build_ek; allow_connectors
+  --update)   copy_engine; build_ek; refresh_bin; migrate_connectors
               if [[ $ON_MAC == 1 && -f "$HOME/Library/LaunchAgents/com.theseus.remote.plist" ]]; then
                 launchctl kickstart -k "gui/$(id -u)/com.theseus.remote" 2>/dev/null && echo "Restarted Remote Control so it uses the new engine."
               fi

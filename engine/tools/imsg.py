@@ -213,9 +213,13 @@ class Contacts:
         self.by_key: dict[str, str] = {}
         cfg = load_config()
         dbs = []
+        sources = []
         if AB_DIR.exists():
-            dbs = sorted(AB_DIR.glob("AddressBook-v22.abcddb")) + \
-                  sorted(AB_DIR.glob("Sources/*/AddressBook-v22.abcddb"))
+            try:
+                sources = sorted(AB_DIR.glob("Sources/*/AddressBook-v22.abcddb"))
+            except OSError:
+                pass
+            dbs = sorted(AB_DIR.glob("AddressBook-v22.abcddb")) + sources
         for n, src in enumerate(dbs):
             try:
                 snap = snapshot(src, CACHE / f"contacts-{n}.db", max_age, fresh)
@@ -224,6 +228,13 @@ class Contacts:
                 raise
             except Exception as e:  # noqa
                 print(f"warning: skipped contacts db {src}: {e}", file=sys.stderr)
+        if not sources:
+            # macOS hides the real address books from Claude Code sessions, leaving only an empty root book. Use the copies the background checks saved.
+            for snap in sorted(CACHE.glob("contacts-*.db")):
+                try:
+                    self._load(snap)
+                except Exception as e:  # noqa
+                    print(f"warning: skipped saved contacts {snap.name}: {e}", file=sys.stderr)
         for k, v in (cfg.get("contact_overrides") or {}).items():
             self.by_key[norm_handle(k)] = v
         self.source_count = len(dbs)

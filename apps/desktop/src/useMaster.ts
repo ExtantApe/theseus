@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { parse } from './master'
+import { diffEvents, parse } from './master'
 
 export type EditEvent = Record<string, unknown>
 type Step = { text: string; event?: EditEvent }
@@ -14,7 +15,7 @@ const TYPING_GROUPS_MS = 800
 /**
  * The master list as the window sees it: one text, one undo history, saved automatically.
  * If a sync changes the file underneath us, drags and checks are replayed on the new text. Undo can't reach back past a sync,
- * because that would quietly throw away what the sync did.
+ * because that would quietly throw away what the sync did. What the person did reaches the next sync with the save itself, never ahead of it.
  */
 export function useMaster() {
   const [text, setTextState] = useState<string | null>(null)
@@ -30,13 +31,15 @@ export function useMaster() {
   const publishTimer = useRef(0)
   const lastTyped = useRef(0)
   const saving = useRef(false)
+  const events = useRef<EditEvent[]>([]) // done but not saved yet
+  const typed = useRef(false) // typed in the Markdown view since the last save
 
   const show = (t: string) => {
     live.current = t
     setTextState(t)
   }
   const log = (event?: EditEvent) => {
-    if (event) void invoke('log_edit', { event }).catch(() => {})
+    if (event) events.current.push(event)
   }
 
   const flush = useCallback(async () => {
@@ -45,13 +48,22 @@ export function useMaster() {
     saving.current = true
     setSave('saving')
     const text = live.current
+    // Typing can do anything, so it's worked out from the text. Otherwise it's what was logged as each thing happened.
+    const wasTyped = typed.current
+    const sending = wasTyped ? diffEvents(disk.current, text) : events.current
+    const sent = events.current.length
     try {
-      await invoke('write_master', { text, base: disk.current })
+      await invoke('write_master', { text, base: disk.current, events: sending })
       disk.current = text
+      events.current = wasTyped ? [] : events.current.slice(sent)
+      // Typing that arrived during this save is still unsaved.
+      typed.current = wasTyped && live.current !== text
       pending.current = []
       setSave('saved')
       window.clearTimeout(publishTimer.current)
-      publishTimer.current = window.setTimeout(() => void invoke('publish_master').catch(() => {}), PUBLISH_AFTER_MS)
+      publishTimer.current = window.setTimeout(() => {
+        invoke<string>('publish_master').then((note) => { if (note) setNotice(note) }).catch((err) => setNotice(`Couldn't update the list note on your phone: ${err}`))
+      }, PUBLISH_AFTER_MS)
     } catch (e) {
       if (String(e).includes('conflict')) {
         const fresh = await invoke<string>('read_master')
@@ -62,10 +74,14 @@ export function useMaster() {
           future.current = []
           setNotice('Theseus just updated the list too. Your change is kept on top of it.')
         } else {
-          past.current = [{ text: live.current }]
+          // Putting the typed text back would overwrite what the sync just did, so it's kept in a file instead of on the undo stack.
+          const kept = await invoke<string>('save_conflict', { text: live.current }).catch(() => '')
+          past.current = []
           future.current = []
+          events.current = []
+          typed.current = false
           show(fresh)
-          setNotice('Theseus just updated the list while you were typing. This is its version; undo brings yours back.')
+          setNotice(`Theseus updated the list while you were typing, so this is its version.${kept ? ` What you typed is saved in ${kept}.` : ''}`)
           pending.current = []
         }
         setSave('saved')
@@ -88,7 +104,7 @@ export function useMaster() {
   /** A change from the list view. */
   const apply = useCallback((fn: (md: string) => string, eventOf?: EditEvent | ((before: string) => EditEvent)) => {
     const next = fn(live.current)
-    if (next === live.current) return
+    if (next === live.current) return false
     const event = typeof eventOf === 'function' ? eventOf(live.current) : eventOf
     past.current.push({ text: live.current, event })
     future.current = []
@@ -96,6 +112,7 @@ export function useMaster() {
     show(next)
     log(event)
     schedule()
+    return true
   }, [schedule])
 
   /** Typing in the Markdown view. A burst of typing is one undo step. */
@@ -105,6 +122,7 @@ export function useMaster() {
     lastTyped.current = now
     future.current = []
     pending.current = null
+    typed.current = true
     show(next)
     schedule()
   }, [schedule])
@@ -149,7 +167,9 @@ export function useMaster() {
     const t = window.setInterval(check, 3000)
     window.addEventListener('focus', check)
     window.addEventListener('blur', flush)
+    const unlisten = listen('commit-now', () => void flush())
     return () => {
+      void unlisten.then((stop) => stop())
       window.clearInterval(t)
       window.removeEventListener('focus', check)
       window.removeEventListener('blur', flush)
@@ -170,7 +190,7 @@ export function useMaster() {
   }, [undo, redo])
 
   const doc = useMemo(() => (text ? parse(text) : null), [text])
-  return { text, doc, save, notice, clearNotice: () => setNotice(''), apply, type, undo, redo, canUndo: past.current.length > 0, canRedo: future.current.length > 0 }
+  return { text, doc, save, notice, clearNotice: () => setNotice(''), flush, apply, type, undo, redo, canUndo: past.current.length > 0, canRedo: future.current.length > 0 }
 }
 
 export type Master = ReturnType<typeof useMaster>

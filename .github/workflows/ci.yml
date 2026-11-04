@@ -10,6 +10,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Private terms for the leak check
+        env:
+          TERMS: ${{ secrets.LEAK_TERMS }}
+        run: if [ -n "$TERMS" ]; then printf '%s\n' "$TERMS" > "$HOME/.theseus-private-terms"; fi
       - run: bash scripts/ci-checks.sh
   app:
     runs-on: macos-latest
@@ -22,4 +26,7 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter theseus-desktop build
+      - run: pnpm exec playwright install webkit
+      - run: pnpm --filter theseus-desktop e2e
       - run: pnpm --filter theseus-desktop tauri build --no-bundle

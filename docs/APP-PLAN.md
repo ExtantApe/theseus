@@ -1,5 +1,7 @@
 # Theseus.app: plan for a single shipped package
 
+> **Where this stands (0.5.0):** the menu bar app ships and hosts everything, with Today, List, Activity and Setup pages. The sections below are the plan as first written. Where they differ from what shipped, ADR 0006 and `apps/desktop/README.md` describe what exists: the app hosts jobs itself rather than through its own LaunchAgent, a small watchdog agent keeps it open, the engine is installed separately rather than bundled, and releases carry a self-signed certificate.
+
 **Goal:** one download, `Theseus.dmg`, that gives anyone the whole thing: the app, the engine, setup, scheduling and updates.
 No Terminal, no Xcode, no copying folders around. The Claude Code plugin stays available as an alternative install of the
 *same engine* for people who live in Claude Code.
@@ -104,9 +106,9 @@ iPhone Shortcut instructions (optional) → `/migrate` (shown as a guided review
 | | Scope | Done when |
 |---|---|---|
 | **M0** (done) | Engine + plugin (v0.4) on the maintainer's Mac | 2 weeks of daily use; Today note, checks and migration feel right |
-| **M1** (first version shipped: menu bar app hosting everything, Today, Services and Permissions views, ADR 0006; popover and Add are still to come) | Menu-bar app: read-only Today popover, Add, What's next, "Use my Claude Code" mode, bundled engine | app replaces Terminal for daily use |
-| **M2** | Background agent (app LaunchAgent) replaces the launchd scripts; native EventKit; permissions owned by the app | no Terminal needed after install |
-| **M3** | Main window: List (drag-rank), Rank cards, Replies questionnaire, Settings with the Schedule editor | full feature parity with the plugin |
+| **M1** (shipped: menu bar app hosting everything, ADR 0006. Still to come: popover, bundled engine) | Menu-bar app: read-only Today popover, Add, What's next, "Use my Claude Code" mode, bundled engine | app replaces Terminal for daily use |
+| **M2** (partly: the app owns permissions and hosts the schedule. Still to come: native EventKit) | Background agent (app LaunchAgent) replaces the launchd scripts; native EventKit; permissions owned by the app | no Terminal needed after install |
+| **M3** (partly: List with drag and undo shipped. Still to come: Rank, Replies, Settings) | Main window: List (drag-rank), Rank cards, Replies questionnaire, Settings with the Schedule editor | full feature parity with the plugin |
 | **M4** | First-run wizard, unsigned DMG release, docs, a 5-person private beta | a non-technical friend installs it alone |
 | **M6** | **Command center**: a wall or desk display served by the Mac on the home network (Raspberry Pi in browser kiosk mode, or a MagicMirror² module reading `wall.json`); landscape and portrait layouts; wall-safe by default; last snapshot shown if the Mac sleeps | glanceable all day, nothing private visible to passers-by |
 | **M7** | **Voice and family (optional)**: on-Pi wake word and fixed commands ("show the family", "show <name>", "in detail", "back"); "in detail" needs confirmation on the person's watch or phone and expires in ~30 s; per-person opt-in profiles; a Family view (week, chores, groceries, dinner, countdowns) for homes without Skylight | a household can share one wall, with each person in control of their own data |

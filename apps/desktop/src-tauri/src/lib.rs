@@ -17,9 +17,10 @@ use std::time::{Duration, Instant};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
 const PY: &str = "/usr/bin/python3";
+const DEFAULT_JOB_MINUTES: u64 = 45;
 
 #[derive(Clone, Serialize, Default)]
 struct Status {
@@ -33,7 +34,9 @@ struct Status {
     job_running: Option<String>,
     last_job: String,
     last_job_output: String,
-    runs_today: Vec<String>,
+    last_answer: String,    // the latest answer to something asked in the window; later syncs don't replace it
+    app_version: String,
+    engine_version: String, // what's installed in the workspace; empty if it's too old to say
 }
 
 struct Remote {
@@ -49,7 +52,7 @@ struct Shared {
     quitting: AtomicBool,
     remote: Mutex<Option<Remote>>,
     status: Mutex<Status>,
-    ran: Mutex<Vec<String>>, // keys of scheduled runs already done ("2026-11-03 05:50 morning")
+    master: Mutex<()>, // one save of the list at a time
 }
 
 type S = Arc<Shared>;
@@ -60,8 +63,36 @@ fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/Users/Shared".into()))
 }
 
+/// Finder starts apps without your shell's settings, so the installer leaves the workspace's location here.
 fn workspace() -> PathBuf {
-    std::env::var("THESEUS_HOME").map(PathBuf::from).unwrap_or_else(|_| home().join("Theseus"))
+    if let Ok(p) = std::env::var("THESEUS_HOME") {
+        return PathBuf::from(p);
+    }
+    fs::read_to_string(home().join("Library/Application Support/Theseus/workspace"))
+        .ok()
+        .map(|t| PathBuf::from(t.trim()))
+        .filter(|p| p.join("config.json").exists())
+        .unwrap_or_else(|| home().join("Theseus"))
+}
+
+/// Whole or not at all: a crash leaves the old file or the new one.
+fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
+/// /usr/bin/python3 is a stub that pops up a dialog until Apple's developer tools are installed.
+fn has_dev_tools() -> bool {
+    Command::new("/usr/bin/xcode-select").arg("-p").output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+fn engine_version(ws: &Path) -> String {
+    fs::read_to_string(ws.join("engine/VERSION")).map(|t| t.trim().to_string()).unwrap_or_default()
 }
 
 fn find_claude() -> Option<PathBuf> {
@@ -90,11 +121,6 @@ fn local_now() -> (String, u32) {
     } else {
         (String::new(), 0)
     }
-}
-
-fn hhmm_to_min(s: &str) -> Option<u32> {
-    let (h, m) = s.split_once(':')?;
-    Some(h.parse::<u32>().ok()? * 60 + m.parse::<u32>().ok()?)
 }
 
 fn log(ws: &Path, file: &str, msg: &str) {
@@ -226,56 +252,100 @@ fn remote_loop(s: S) {
 
 // ---------- jobs (sync, morning, nightly, status) ----------
 
-fn prompt_for(kind: &str, reason: &str) -> String {
+/// The same words launchd's jobs use (engine/scheduled/prompts.json), so a run doesn't depend on which host started it.
+fn prompt_for(ws: &Path, kind: &str, reason: &str) -> String {
     if kind == "ask" {
         return format!(
             "The user asked this in the Theseus app: \"{reason}\". Answer briefly and follow engine/RULES.md. If it's something to do or remember, add it to the list. Never send anything. This run can't ask follow-up questions, so make the sensible choice and say what you did."
         );
     }
-    let wf = match kind {
-        "morning" => "engine/workflows/morning.md",
-        "nightly" => "engine/workflows/nightly.md",
-        "status" => "engine/workflows/status.md",
-        _ => "engine/workflows/sync.md",
-    };
+    let prompts: Value = fs::read_to_string(ws.join("engine/scheduled/prompts.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
+    let base = prompts[kind].as_str().map(str::to_string).unwrap_or_else(|| format!("Run exactly as defined in engine/workflows/{kind}.md."));
     let extra = if reason.is_empty() { String::new() } else { format!(" Reason for this run: {reason}.") };
-    format!("Run exactly as defined in {wf}.{extra} This is an unattended run started by Theseus.app: never wait for input.")
+    format!("{base}{extra} {}", prompts["unattended"].as_str().unwrap_or("This is an unattended run: never wait for input."))
 }
 
 fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
+    let claude = s.claude.clone().ok_or("Claude Code not found")?;
     {
-        let st = s.status.lock().unwrap();
+        // Claiming the slot is one step, so two threads can't both start a run.
+        let mut st = s.status.lock().unwrap();
         if let Some(j) = &st.job_running {
             return Err(format!("{j} is already running"));
         }
+        st.job_running = Some(kind.to_string());
     }
-    let claude = s.claude.clone().ok_or("Claude Code not found")?;
     let (d, m) = local_now();
     let stamp = format!("{}_{:02}{:02}", d, m / 60, m % 60);
     let out_path = s.ws.join(format!("logs/app-{kind}-{stamp}.out"));
-    let out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
-    let err = out.try_clone().map_err(|e| e.to_string())?;
-    let mut child = Command::new(&claude)
-        .args(["-p", &prompt_for(kind, reason), "--output-format", "text"])
-        .current_dir(&s.ws)
-        .env("PATH", path_env())
-        .stdin(Stdio::null())
-        .stdout(out)
-        .stderr(err)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    set(s, |st| st.job_running = Some(kind.to_string()));
+    let files = fs::File::create(&out_path).and_then(|o| o.try_clone().map(|e| (o, e)));
+    let (out, err) = match files {
+        Ok(f) => f,
+        Err(e) => {
+            set(s, |st| st.job_running = None);
+            return Err(e.to_string());
+        }
+    };
     let s2 = s.clone();
     let kind = kind.to_string();
+    let reason = reason.to_string();
     thread::spawn(move || {
-        let code = child.wait().map(|c| c.to_string()).unwrap_or_else(|e| e.to_string());
+        if kind != "ask" {
+            let _ = Command::new("/bin/bash").arg("engine/scheduled/before-run.sh").current_dir(&s2.ws).env("THESEUS_HOME", &s2.ws).env("PATH", path_env()).output();
+        }
+        let limit = config(&s2.ws)["job_time_limit_minutes"].as_u64().unwrap_or(DEFAULT_JOB_MINUTES).max(1);
+        let spawned = Command::new(&claude)
+            .args(["-p", &prompt_for(&s2.ws, &kind, &reason), "--output-format", "text"])
+            .current_dir(&s2.ws)
+            .env("PATH", path_env())
+            .env("THESEUS_HOME", &s2.ws)
+            .stdin(Stdio::null())
+            .stdout(out)
+            .stderr(err)
+            .spawn();
+        let mut child = match spawned {
+            Ok(c) => c,
+            Err(e) => {
+                // It never ran, so it mustn't count as having run.
+                let _ = fs::remove_file(&out_path);
+                log(&s2.ws, "app.log", &format!("couldn't start {kind}: {e}"));
+                set(&s2, |st| { st.job_running = None; st.last_job = format!("{kind} couldn't start: {e}"); });
+                return;
+            }
+        };
+        let started = Instant::now();
+        let outcome = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status.success(), status.to_string()),
+                Ok(None) if s2.quitting.load(Ordering::SeqCst) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break (false, "stopped: Theseus is quitting".to_string());
+                }
+                Ok(None) if started.elapsed() > Duration::from_secs(limit * 60) => {
+                    // One hung run must not hold up every later one.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    log(&s2.ws, "app.log", &format!("stopped {kind} after {limit} minutes"));
+                    break (false, format!("stopped after {limit} minutes"));
+                }
+                Ok(None) => thread::sleep(Duration::from_secs(2)),
+                Err(e) => break (false, e.to_string()),
+            }
+        };
+        // The changes this run was for count as handled only now that it has finished. If it failed, they wait for the next one.
+        if outcome.0 && kind == "sync" {
+            let _ = Command::new(PY).args(["engine/tools/changes.py", "--ack"]).current_dir(&s2.ws).env("THESEUS_HOME", &s2.ws).output();
+        }
         let text = fs::read_to_string(&out_path).unwrap_or_default();
-        let (d, m) = local_now();
+        let (_, m) = local_now();
         set(&s2, |st| {
             st.job_running = None;
-            st.last_job = format!("{kind} at {}:{:02} ({code})", m / 60, m % 60);
+            st.last_job = format!("{kind} at {}:{:02} ({})", m / 60, m % 60, outcome.1);
             st.last_job_output = text.chars().rev().take(4000).collect::<String>().chars().rev().collect();
-            st.runs_today.push(format!("{d} {:02}:{:02} {kind}", m / 60, m % 60));
+            if kind == "ask" {
+                st.last_answer = st.last_job_output.clone();
+            }
         });
     });
     Ok(())
@@ -287,36 +357,29 @@ fn schedule_loop(s: S) {
         if s.quitting.load(Ordering::SeqCst) {
             return;
         }
-        thread::sleep(Duration::from_secs(20));
+        thread::sleep(Duration::from_secs(30));
         let cfg = config(&s.ws);
-        if cfg["scheduler_host"].as_str() != Some("app") || s.paused.load(Ordering::SeqCst) {
+        if cfg["scheduler_host"].as_str() != Some("app") || s.paused.load(Ordering::SeqCst) || !has_dev_tools() {
             continue;
         }
-        let (today, now) = local_now();
 
-        // Morning and nightly runs, from the engine's own per-day schedule.
-        let plan = Command::new(PY).arg("engine/tools/schedule.py").current_dir(&s.ws).output().ok()
+        // Morning and nightly runs. The engine decides what's due, including a run missed while the Mac slept, and logs show what already ran.
+        // If something else is running, it's still due next time round.
+        let due = Command::new(PY).args(["engine/tools/schedule.py", "due"]).current_dir(&s.ws).env("THESEUS_HOME", &s.ws).output().ok()
             .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok());
-        if let Some(day) = plan.as_ref().and_then(|p| p["days"].get(0)) {
-            for (kind, key) in [("morning", "morning_run"), ("nightly", "nightly_run")] {
-                if let Some(at) = day[key].as_str().and_then(hhmm_to_min) {
-                    let run_key = format!("{today} {at} {kind}");
-                    let due = now >= at && now < at + 15;
-                    let done = s.ran.lock().unwrap().contains(&run_key);
-                    if due && !done && run_job(&s, kind, "scheduled").is_ok() {
-                        s.ran.lock().unwrap().push(run_key);
-                        log(&s.ws, "app.log", &format!("started {kind} run"));
-                    }
-                }
+        if let Some(kind) = due.as_ref().and_then(|d| d["due"].as_str()) {
+            if run_job(&s, kind, "scheduled").is_ok() {
+                log(&s.ws, "app.log", &format!("started {kind} run"));
             }
         }
 
         // Cheap change checks: Claude only runs when something changed (changes.py decides, with its own cooldown and quiet hours).
         let every = cfg["checks"]["every_minutes"].as_u64().unwrap_or(5).max(1);
         let checks_on = cfg["checks"]["enabled"].as_bool().unwrap_or(false);
-        if checks_on && last_check.elapsed() >= Duration::from_secs(every * 60) {
+        let busy = s.status.lock().unwrap().job_running.is_some();
+        if checks_on && !busy && last_check.elapsed() >= Duration::from_secs(every * 60) {
             last_check = Instant::now();
-            if let Ok(o) = Command::new(PY).arg("engine/tools/changes.py").current_dir(&s.ws).output() {
+            if let Ok(o) = Command::new(PY).arg("engine/tools/changes.py").current_dir(&s.ws).env("THESEUS_HOME", &s.ws).output() {
                 let reason = String::from_utf8_lossy(&o.stdout).trim().to_string();
                 let (_, m) = local_now();
                 set(&s, |st| st.last_check = format!("{}:{:02} {}", m / 60, m % 60, reason));
@@ -336,6 +399,8 @@ fn get_status(s: State<'_, S>) -> Status {
     let mut st = s.status.lock().unwrap().clone();
     st.paused = s.paused.load(Ordering::SeqCst);
     st.hosting = hosting(&config(&s.ws));
+    st.app_version = env!("CARGO_PKG_VERSION").to_string();
+    st.engine_version = engine_version(&s.ws);
     st
 }
 
@@ -361,9 +426,13 @@ fn read_master(s: State<'_, S>) -> String {
 }
 
 /// Auto-save. `base` is the text this edit started from: if the file changed since (a sync ran), nothing is written and the window
-/// replays the edit on the new text. The write is atomic, and an hourly copy goes in data/archive.
+/// replays the edit on the new text. The write is atomic, and an hourly copy goes in data/archive. What the person did goes to the next
+/// sync only once it's saved, so the log can't claim something the list doesn't show: it completes things elsewhere and treats moves as
+/// their own ranking (RULES §3).
 #[tauri::command(async)]
-fn write_master(text: String, base: String, s: State<'_, S>) -> Result<(), String> {
+fn write_master(text: String, base: String, events: Vec<Value>, s: State<'_, S>) -> Result<(), String> {
+    use std::io::Write;
+    let _one_at_a_time = s.master.lock().unwrap();
     let path = master_path(&s.ws);
     let disk = fs::read_to_string(&path).unwrap_or_default();
     if disk != base {
@@ -381,25 +450,44 @@ fn write_master(text: String, base: String, s: State<'_, S>) -> Result<(), Strin
     }
     let tmp = s.ws.join("data/.master.md.tmp");
     fs::write(&tmp, &text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    // Last look, right before the swap. Claude Code's own edits are refused if the file changed since it read it, which covers the other direction.
+    if fs::read_to_string(&path).unwrap_or_default() != disk {
+        let _ = fs::remove_file(&tmp);
+        return Err("conflict".into());
+    }
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    if !events.is_empty() {
+        let mut f = OpenOptions::new().create(true).append(true).open(s.ws.join("data/app-edits.jsonl")).map_err(|e| e.to_string())?;
+        for mut e in events {
+            e["time"] = Value::from(format!("{d} {:02}:{:02}", m / 60, m % 60));
+            writeln!(f, "{e}").map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
-/// What the person did, for the next sync: it completes things elsewhere and treats moves as their own ranking (RULES §3).
+/// Typing lost to a sync that landed at the same moment: kept in a file, so nothing is lost and nothing overwrites what the sync did.
 #[tauri::command(async)]
-fn log_edit(event: Value, s: State<'_, S>) -> Result<(), String> {
-    use std::io::Write;
+fn save_conflict(text: String, s: State<'_, S>) -> Result<String, String> {
     let (d, m) = local_now();
-    let mut e = event;
-    e["time"] = Value::from(format!("{d} {:02}:{:02}", m / 60, m % 60));
-    let mut f = OpenOptions::new().create(true).append(true).open(s.ws.join("data/app-edits.jsonl")).map_err(|e| e.to_string())?;
-    writeln!(f, "{e}").map_err(|e| e.to_string())
+    let archive = s.ws.join("data/archive");
+    fs::create_dir_all(&archive).map_err(|e| e.to_string())?;
+    let name = format!("master-conflict-{d}-{:02}{:02}.md", m / 60, m % 60);
+    fs::write(archive.join(&name), text).map_err(|e| e.to_string())?;
+    Ok(format!("data/archive/{name}"))
 }
 
 /// Update the phone's copy of the list. If the person edited that note, the tool refuses and the next run folds their edits in.
 #[tauri::command(async)]
-fn publish_master(s: State<'_, S>) -> Result<(), String> {
-    let o = Command::new(PY).args(["engine/tools/notes.py", "master-publish"]).current_dir(&s.ws).env("PATH", path_env()).output().map_err(|e| e.to_string())?;
-    if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().chars().take(200).collect()) }
+fn publish_master(s: State<'_, S>) -> Result<String, String> {
+    let o = Command::new(PY).args(["engine/tools/notes.py", "master-publish"]).current_dir(&s.ws).env("PATH", path_env()).env("THESEUS_HOME", &s.ws).output().map_err(|e| e.to_string())?;
+    if o.status.success() {
+        return Ok(String::new());
+    }
+    if o.status.code() == Some(4) {
+        return Ok("You edited the list note in Notes. The next sync folds that in, then updates the note.".into());
+    }
+    Err(String::from_utf8_lossy(&o.stderr).trim().chars().take(200).collect())
 }
 
 #[derive(Serialize)]
@@ -468,6 +556,10 @@ fn perm(id: &str, name: &str, why: &str, state: &str, detail: &str) -> Permissio
 #[tauri::command(async)]
 fn permissions(s: State<'_, S>) -> Vec<Permission> {
     let mut out = vec![];
+    let dev = has_dev_tools();
+    if !dev {
+        out.push(perm("tools", "Apple's command line tools", "Theseus's tools need them. In Terminal, run: xcode-select --install", "denied", ""));
+    }
     let fda = fs::File::open(home().join("Library/Messages/chat.db")).is_ok();
     out.push(perm("files", "Full Disk Access", "To read your texts and Mail. You add Theseus to this list yourself; macOS never asks.", if fda { "ok" } else { "denied" }, ""));
     let ek = Command::new(s.ws.join("bin/ek")).arg("status").current_dir(&s.ws).output().ok()
@@ -524,7 +616,76 @@ fn open_privacy(pane: String) {
     let _ = Command::new("/usr/bin/open").arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}")).spawn();
 }
 
-const JOBS: [&str; 6] = ["remote", "morning", "nightly", "sync", "check", "channel"];
+// The jobs the app replaces. The iMessage channel isn't one of them: it keeps running under launchd.
+const JOBS: [&str; 5] = ["remote", "morning", "nightly", "sync", "check"];
+const WATCHDOG: &str = "com.theseus.watchdog";
+
+fn quit_flag() -> PathBuf {
+    // /tmp empties on restart, so quitting Theseus lasts until the next restart or until you open it again.
+    PathBuf::from(format!("/tmp/theseus-quit-{}", uid()))
+}
+
+fn app_bundle() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    exe.ancestors().find(|p| p.extension().map(|e| e == "app").unwrap_or(false)).map(Path::to_path_buf)
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Hosting means briefings stop if the app does, so a small launch agent opens it at login and reopens it if it crashes. Quitting from the
+/// menu is respected. Development builds have no bundle, so they don't get one.
+fn install_watchdog(ws: &Path) {
+    let Some(app) = app_bundle() else { return };
+    let path = home().join("Library/LaunchAgents").join(format!("{WATCHDOG}.plist"));
+    let script = format!("pgrep -xq theseus || [ -e {} ] || open -g -j {}", quit_flag().display(), shell_quote(&app.display().to_string()));
+    let plist = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>{WATCHDOG}</string>
+<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>{}</string></array>
+<key>RunAtLoad</key><true/>
+<key>StartInterval</key><integer>300</integer>
+</dict></plist>
+"#,
+        xml_escape(&script)
+    );
+    if fs::read_to_string(&path).map(|t| t == plist).unwrap_or(false) {
+        return;
+    }
+    let _ = fs::create_dir_all(path.parent().unwrap());
+    let domain = format!("gui/{}", uid());
+    let _ = Command::new("/bin/launchctl").args(["bootout", &domain, path.to_str().unwrap_or("")]).output();
+    if fs::write(&path, plist).is_ok() {
+        let _ = Command::new("/bin/launchctl").args(["bootstrap", &domain, path.to_str().unwrap_or("")]).output();
+        log(ws, "app.log", "installed the launch agent that keeps Theseus open");
+    }
+}
+
+fn remove_watchdog() {
+    let path = home().join("Library/LaunchAgents").join(format!("{WATCHDOG}.plist"));
+    let _ = Command::new("/bin/launchctl").args(["bootout", &format!("gui/{}", uid()), path.to_str().unwrap_or("")]).output();
+    let _ = fs::remove_file(path);
+}
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Stop the Remote Control server serving this workspace, and only that one: other projects on this Mac have their own.
+fn stop_old_servers(ws: &Path) {
+    let _ = Command::new("/usr/bin/pkill").args(["-f", "Theseus Remote.command"]).output();
+    let Ok(o) = Command::new("/usr/bin/pgrep").args(["-f", "remote-control --name"]).output() else { return };
+    for pid in String::from_utf8_lossy(&o.stdout).split_whitespace() {
+        let Ok(l) = Command::new("/usr/sbin/lsof").args(["-a", "-d", "cwd", "-p", pid, "-Fn"]).output() else { continue };
+        let here = format!("n{}", ws.display());
+        if String::from_utf8_lossy(&l.stdout).lines().any(|line| line == here) {
+            let _ = Command::new("/bin/kill").arg(pid).output();
+        }
+    }
+}
 
 fn uid() -> String {
     Command::new("/usr/bin/id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
@@ -537,13 +698,15 @@ fn set_hosts(ws: &Path, remote: &str, scheduler: &str) -> Result<(), String> {
     }
     cfg["remote_control"]["host"] = Value::from(remote);
     cfg["scheduler_host"] = Value::from(scheduler);
-    fs::write(ws.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap()).map_err(|e| e.to_string())
+    write_atomic(&ws.join("config.json"), &(serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())? + "\n"))
 }
 
-/// Move hosting from Terminal/launchd to the app. The old jobs stop first, so the app doesn't start a server only to have it killed.
+/// Move hosting from Terminal/launchd to the app. The config changes first: from then on the old jobs do nothing even if they run, so a
+/// failure further down can't leave you with nothing running or with both running.
 #[tauri::command(async)]
 fn take_over(s: State<'_, S>) -> Result<String, String> {
     let ws = &s.ws;
+    set_hosts(ws, "app", "app")?;
     let uid = uid();
     let la = home().join("Library/LaunchAgents");
     let aside = ws.join("data/archive/launchagents");
@@ -558,15 +721,14 @@ fn take_over(s: State<'_, S>) -> Result<String, String> {
             }
         }
     }
-    let _ = Command::new("/usr/bin/pkill").args(["-f", "Theseus Remote.command"]).output();
-    let _ = Command::new("/usr/bin/pkill").args(["-f", "remote-control --name"]).output();
-    set_hosts(ws, "app", "app")?;
+    stop_old_servers(ws);
+    install_watchdog(ws);
     set(&s, |st| {
         st.remote = "Waiting for the previous server to let go of this folder. This can take a few minutes, and it retries by itself.".into();
         st.remote_state = "waiting".into();
     });
     log(ws, "app.log", &format!("took over hosting; launch agents set aside: {moved:?}"));
-    Ok("Theseus now runs everything. Remote Control may take a few minutes to come back while the old server lets go.".into())
+    Ok("Theseus now runs everything, and reopens itself at login or after a crash. Remote Control may take a few minutes to come back while the old server lets go.".into())
 }
 
 /// Give hosting back: the background jobs and the Terminal window return right away, so nothing is left unattended.
@@ -575,11 +737,13 @@ fn hand_back(s: State<'_, S>) -> Result<String, String> {
     let ws = &s.ws;
     set_hosts(ws, "terminal", "launchd")?;
     stop_remote(&s);
+    remove_watchdog();
     let uid = uid();
     let la = home().join("Library/LaunchAgents");
     let aside = ws.join("data/archive/launchagents");
     let mut back = vec![];
-    for job in JOBS {
+    // "channel" too: an earlier version set it aside along with the rest.
+    for job in JOBS.iter().copied().chain(["channel"]) {
         let name = format!("com.theseus.{job}.plist");
         let from = aside.join(&name);
         let to = la.join(&name);
@@ -595,6 +759,11 @@ fn hand_back(s: State<'_, S>) -> Result<String, String> {
 
 // ---------- app ----------
 
+/// Anything still waiting in the window (a check-off in its countdown, an unsaved edit) gets done now.
+fn settle_window(app: &AppHandle) {
+    let _ = app.emit("commit-now", ());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let shared: S = Arc::new(Shared {
@@ -604,7 +773,7 @@ pub fn run() {
         quitting: AtomicBool::new(false),
         remote: Mutex::new(None),
         status: Mutex::new(Status::default()),
-        ran: Mutex::new(vec![]),
+        master: Mutex::new(()),
     });
     let _ = fs::create_dir_all(shared.ws.join("logs"));
     set(&shared, |st| {
@@ -612,16 +781,23 @@ pub fn run() {
         st.claude = shared.claude.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "not found".into());
     });
 
+    let on_exit = shared.clone();
     tauri::Builder::default()
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
-            get_status, read_today, read_master, write_master, log_edit, publish_master, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
+            get_status, read_today, read_master, write_master, save_conflict, publish_master, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // Open on the very first launch, so a new user isn't left with only a menu bar icon.
+            // Opening the app undoes "Quit": from here on, the watchdog looks after it again.
+            let _ = fs::remove_file(quit_flag());
+            if hosting(&config(&shared.ws)) {
+                install_watchdog(&shared.ws);
+            }
+
             let seen = shared.ws.join("logs/.app-opened");
             if !seen.exists() {
                 let _ = fs::write(&seen, "");
@@ -663,6 +839,9 @@ pub fn run() {
                         let _ = pause_item.set_text(if now { "Resume checks and Remote Control" } else { "Pause checks and Remote Control" });
                     }
                     "quit" => {
+                        let _ = fs::write(quit_flag(), "");
+                        settle_window(app);
+                        thread::sleep(Duration::from_millis(600));
                         s_menu.quitting.store(true, Ordering::SeqCst);
                         stop_remote(&s_menu);
                         app.exit(0);
@@ -704,18 +883,25 @@ pub fn run() {
             // Closing the window just hides it; Theseus keeps running in the menu bar.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
+                settle_window(window.app_handle());
                 let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
         .expect("error while starting Theseus")
-        .run(|handle, event| {
+        .run(move |handle, event| match event {
             // Opening the app again (Finder, Spotlight) brings the window back.
-            if let RunEvent::Reopen { .. } = event {
+            RunEvent::Reopen { .. } => {
                 if let Some(w) = handle.get_webview_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
             }
+            // Any way out, including logging out: don't leave the server behind.
+            RunEvent::Exit => {
+                on_exit.quitting.store(true, Ordering::SeqCst);
+                stop_remote(&on_exit);
+            }
+            _ => {}
         });
 }

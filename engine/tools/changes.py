@@ -11,7 +11,10 @@ Sources (only enabled integrations): texts (newest message id), Notes inbox + pi
 Reminders and today's Calendar (content hash via bin/ek), iPhone alarms file (mtime), Apple Mail (newest message id), things done in Theseus.app.
 Email via connectors can't be checked locally, so it's covered by the periodic full refresh.
 
-Usage: python3 engine/tools/changes.py [--explain] [--force]
+A change stays on the books until the run it started has finished: the host calls --ack after a successful sync. If that run fails, or never
+starts because something else was running, the change is handled by the next one instead of waiting for the hourly refresh.
+
+Usage: python3 engine/tools/changes.py [--explain] [--force] | --ack
 """
 from __future__ import annotations
 
@@ -62,11 +65,19 @@ def h(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
 
+def write_json(path: Path, obj):
+    """Whole or not at all: several programs read these files."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(obj, indent=1))
+    os.replace(tmp, path)
+
+
 NOTES_JXA = r"""
 function run(argv){const r=JSON.parse(argv[0]);const N=Application('Notes');let out=[];
  try{const a=N.accounts.byName(r.account);const f=a.folders.byName(r.inbox);
    out.push('inbox:'+f.notes.length+':'+f.notes.modificationDate().map(d=>d.getTime()).join(','));}catch(e){out.push('inbox:none');}
- if(r.today_id){try{out.push('today:'+N.notes.byId(r.today_id).modificationDate().getTime());}catch(e){out.push('today:none');}}
+ if(r.today_id){try{const t=N.notes.byId(r.today_id).modificationDate().getTime();out.push('today:'+(t===r.today_written?'as-written':t));}catch(e){out.push('today:none');}}
  return out.join('|');}
 """
 
@@ -89,15 +100,19 @@ def fingerprint(c: dict, prev_state: dict, extra: dict) -> dict[str, str]:
         if prev_fp.get("notes") and prev_state.get("notes_store_mtime") == mt:
             fp["notes"] = prev_fp["notes"]
         else:
-            today_id = None
+            today_id = written = None
             try:
                 st = json.loads((WS / "data/state.json").read_text())
-                today_id = (st.get("note:" + c.get("today_note_title", "📌 Today")) or {}).get("id")
+                rec = st.get("note:" + c.get("today_note_title", "📌 Today")) or {}
+                today_id, written = rec.get("id"), rec.get("modified_ms")
             except Exception:
                 pass
+            # Theseus's own publish changes the note's date. notes.py records that date, so only someone else's edit counts as a change.
             req = json.dumps({"account": c.get("notes_account", "iCloud"), "inbox": c.get("notes_inbox_folder", "Theseus"),
-                              "today_id": today_id})
-            fp["notes"] = h(run(["osascript", "-l", "JavaScript", "-e", NOTES_JXA, req]))
+                              "today_id": today_id, "today_written": written})
+            seen = run(["osascript", "-l", "JavaScript", "-e", NOTES_JXA, req])
+            # Notes being slow isn't a change.
+            fp["notes"] = prev_fp["notes"] if seen.startswith("err:") and prev_fp.get("notes") else h(seen)
         extra["notes_store_mtime"] = mt
     ek = WS / "bin/ek"
     if on(c, "reminders") and ek.exists():
@@ -122,9 +137,10 @@ def fingerprint(c: dict, prev_state: dict, extra: dict) -> dict[str, str]:
         if vs:
             fp["mail"] = str(sql_scalar(vs[-1] / "MailData/Envelope Index", "SELECT MAX(ROWID) FROM messages"))
     # Things done in Theseus.app wait for a sync to reach Reminders and the rest. The sync empties this file.
-    edits = WS / "data" / "app-edits.jsonl"
-    if edits.exists() and edits.stat().st_size:
-        fp["app"] = h(str(edits.stat().st_size))
+    edits = [WS / "data" / "app-edits.jsonl", *sorted((WS / "data").glob("app-edits.processing-*.jsonl"))]
+    size = sum(p.stat().st_size for p in edits if p.exists())
+    if size:
+        fp["app"] = h(str(size))
     return fp
 
 
@@ -163,7 +179,7 @@ def log_rhythm(c: dict, now: float, changed: list[str]):
     rec["last"] = t.strftime("%H:%M")
     for k in sorted(r)[:-60]:
         r.pop(k)
-    p.write_text(json.dumps(r, indent=1))
+    write_json(p, r)
 
 
 def refresh_copies(c: dict, changed: list[str]):
@@ -183,7 +199,20 @@ def refresh_copies(c: dict, changed: list[str]):
             pass
 
 
+def ack():
+    """The last sync finished, so what it was started for has been handled."""
+    try:
+        st = json.loads(STATE.read_text())
+    except Exception:
+        return
+    st["claimed"] = []
+    st["last_full"] = time.time()   # any finished sync is a full refresh
+    write_json(STATE, st)
+
+
 def main():
+    if "--ack" in sys.argv:
+        return ack()
     explain = "--explain" in sys.argv
     force = "--force" in sys.argv
     c = cfg()
@@ -202,29 +231,31 @@ def main():
     extra: dict = {}
     fp = fingerprint(c, prev, extra)
     changed = sorted(k for k in fp if fp[k] != (prev.get("fp") or {}).get(k))
-    pending = sorted(set(prev.get("pending", [])) | set(changed))      # changes seen but not yet handled by Claude
+    claimed = prev.get("claimed", [])                                  # given to a run that hasn't finished (or that failed)
+    pending = sorted(set(prev.get("pending", [])) | set(changed))      # seen, and not yet given to a run
+    waiting = sorted(set(pending) | set(claimed))
     full_due = now - prev.get("last_full", 0) >= full_every
     cooled = now - prev.get("last_claude", 0) >= cooldown
-    want = force or bool(pending) or full_due or not chk.get("skip_if_nothing_changed", True)
+    want = force or bool(waiting) or full_due or not chk.get("skip_if_nothing_changed", True)
     quiet_hours = (now - prev.get("last_activity", now)) / 3600
     first_activity = bool(changed) and quiet_hours >= 4          # first sign of life after a long quiet stretch
     run_claude = force or first_activity or (want and cooled)
     if run_claude:
         reason = ("forced" if force else
-                  f"first activity after {quiet_hours:.0f}h quiet (you're up): " + ", ".join(pending) if first_activity else
-                  "changed: " + ", ".join(pending) if pending else "full refresh due")
+                  f"first activity after {quiet_hours:.0f}h quiet (you're up): " + ", ".join(waiting) if first_activity else
+                  "changed: " + ", ".join(waiting) if waiting else "full refresh due")
     elif want:
-        reason = f"waiting (cooldown): {', '.join(pending) or 'full refresh'}"
+        reason = f"waiting (cooldown): {', '.join(waiting) or 'full refresh'}"
     else:
         reason = "nothing changed"
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps({
+    write_json(STATE, {
         "fp": fp, "last_check": now, "last_reason": reason, **extra,
         "pending": [] if run_claude else pending,
+        "claimed": waiting if run_claude else claimed,
         "last_claude": now if run_claude else prev.get("last_claude", 0),
-        "last_full": now if run_claude else prev.get("last_full", 0),   # any Claude sync is a full refresh
+        "last_full": prev.get("last_full", 0),
         "last_activity": now if changed else prev.get("last_activity", now),
-    }, indent=1))
+    })
     log_rhythm(c, now, changed)
     refresh_copies(c, changed)
     if explain:

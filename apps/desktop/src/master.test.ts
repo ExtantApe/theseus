@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { addItem, complete, editTitle, findItem, findSection, items, moveItem, parse, reopen, sectionTitle, serialize, dropEmoji } from './master.ts'
+import { addItem, commsSection, complete, diffEvents, doneSection, editTitle, findItem, findSection, items, moveItem, nowSection, parse, reopen, sectionTitle, serialize, dropEmoji } from './master.ts'
 
 const MD = `# ★ Master List
 _Updated Tue 11/3 6:02am · 2 NOW_
@@ -70,7 +70,7 @@ test('move to an empty section', () => {
 test('complete goes to the top of Done with the date before the id', () => {
   const md = complete(MD, 't0001', on)
   assert.equal(titles(md, 'done')[0], 'Renew license')
-  assert.match(md, /- \[x\] Renew license · #Biz · due Fri 11\/7 · ~15m · ⏰ 🏠 · done 11\/3 · id:t0001\n  - asked by Sam/)
+  assert.match(md, /- \[x\] Renew license · #Biz · due Fri 11\/7 · ~15m · ⏰ 🏠 · done 11\/3 · was:now · id:t0001\n  - asked by Sam/)
   assert.deepEqual(titles(md, 'now'), ['Book dentist'])
 })
 
@@ -116,4 +116,45 @@ test('emoji come off for display; numbers, check marks and arrows stay', () => {
   assert.equal(dropEmoji('⚠️ 3 files'), '3 files')
   assert.equal(dropEmoji('Lunch ⏰ with Sam 🏠'), 'Lunch with Sam')
   assert.equal(dropEmoji('✓ done → next'), '✓ done → next')
+})
+
+test('reopening goes back to where it was checked off from', () => {
+  const done = complete(MD, 't0003', on)
+  assert.match(done, /Reply to Sam · #Friends · done 11\/3 · was:communications · id:t0003/)
+  assert.deepEqual(titles(reopen(done, 't0003'), 'communications'), ['Reply to Sam'])
+  assert.equal(reopen(done, 't0003'), MD)
+})
+test('a two-word section survives the round trip', () => {
+  const md = '## 🧩 FIGURE OUT\n- [ ] Puzzle · id:p1\n## 🔥 NOW\n## ✅ DONE\n'
+  assert.deepEqual(titles(reopen(complete(md, 'p1', on), 'p1'), 'figure out'), ['Puzzle'])
+})
+test('reopening with nowhere to go falls back to the top of the day', () => {
+  assert.deepEqual(titles(reopen(MD, 't0005'), 'now')[0], 'Old thing')
+})
+test('two items with the same title and no id stay two items', () => {
+  const md = '## 🔥 NOW\n- [ ] Call\n- [ ] Call\n## ✅ DONE\n'
+  const [a, b] = items(findSection(parse(md), 'now'))
+  assert.notEqual(a.key, b.key)
+  const after = complete(md, b.key, on)
+  assert.equal(items(findSection(parse(after), 'now')).length, 1)
+})
+test('an item keeps its key while its line changes', () => {
+  const md = '## 🔥 NOW\n- [ ] Call\n## ✅ DONE\n'
+  assert.ok(findItem(parse(complete(md, 'title:Call', on)), 'title:Call'))
+})
+test('sections are found by what they are for, whatever they are called', () => {
+  const doc = parse('## Top of the day\n- [ ] a\n## Comms\n- [ ] b\n## Completed\n- [x] c\n')
+  assert.equal(nowSection(doc)?.title, 'Top of the day')
+  assert.equal(commsSection(doc)?.title, 'Comms')
+  assert.equal(doneSection(doc)?.title, 'Completed')
+  assert.match(complete('## Top\n- [ ] a\n## Completed\n', 'title:a', on), /## Completed\n- \[x\] a/)
+})
+test('the Markdown view reports what typing did', () => {
+  const typed = MD.replace('- [ ] Book dentist', '- [x] Book dentist').replace('Reply to Sam', 'Reply to Sam now').replace('- [ ] Water plants · #Home · ↻ every Monday · due Mon 11/9 · ⏰ · id:t0004\n', '') + '- [ ] Brand new\n'
+  const ev = diffEvents(MD, typed)
+  assert.ok(ev.some((e) => e.action === 'complete' && e.id === 't0002'))
+  assert.ok(ev.some((e) => e.action === 'edit' && e.id === 't0003' && e.was === 'Reply to Sam'))
+  assert.ok(ev.some((e) => e.action === 'remove' && e.id === 't0004'))
+  assert.ok(ev.some((e) => e.action === 'add' && e.title === 'Brand new'))
+  assert.deepEqual(diffEvents(MD, MD), [])
 })

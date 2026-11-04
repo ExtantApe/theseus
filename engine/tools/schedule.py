@@ -27,6 +27,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -104,6 +105,43 @@ def is_awake(c: dict, now: dt.datetime | None = None) -> bool:
     return False
 
 
+# How long a missed briefing is still worth running, in hours. launchd runs a missed job when the Mac wakes; Theseus.app does the same with this.
+CATCH_UP_HOURS = {"morning": 5, "nightly": 3}
+
+
+def scheduled_at(c: dict, d: dt.date, job: str) -> dt.datetime:
+    """When this day's run really happens. An evening run set after midnight belongs to the next calendar day."""
+    p = day_plan(c, d)
+    m = mins(p[f"{job}_run"])
+    at = dt.datetime.combine(d, dt.time(m // 60, m % 60))
+    return at + dt.timedelta(days=1) if job == "nightly" and m < mins(p["wake"]) else at
+
+
+def already_ran(ws: Path, job: str, at: dt.datetime) -> bool:
+    """Whichever host ran it left a log named with the start time, so this survives restarts and a change of host."""
+    for pattern in (f"{job}-*.out", f"app-{job}-*.out"):
+        for f in (ws / "logs").glob(pattern):
+            m = re.search(r"\d{4}-\d{2}-\d{2}_\d{4}$", f.stem)
+            if m and dt.datetime.strptime(m.group(), "%Y-%m-%d_%H%M") >= at:
+                return True
+    return False
+
+
+def due(c: dict, ws: Path, now: dt.datetime | None = None) -> str | None:
+    """The briefing that should run now, if any. Only the most recent one counts: waking at 6am runs the morning, not last night's prep too."""
+    now = now or dt.datetime.now()
+    found = []
+    for job, hours in CATCH_UP_HOURS.items():
+        for d in (now.date(), now.date() - dt.timedelta(days=1)):
+            at = scheduled_at(c, d, job)
+            if at <= now <= at + dt.timedelta(hours=hours):
+                found.append((at, job))
+    if not found:
+        return None
+    at, job = max(found)
+    return None if already_ran(ws, job, at) else job
+
+
 def runs_for_launchd(c: dict) -> dict[str, list[dict]]:
     """StartCalendarInterval entries per job, with launchd weekdays (0 = Sunday)."""
     out = {"morning": [], "nightly": []}
@@ -127,6 +165,9 @@ def runs_for_launchd(c: dict) -> dict[str, list[dict]]:
 
 def main():
     c = load_cfg()
+    if "due" in sys.argv:
+        print(json.dumps({"due": due(c, Path(os.environ.get("THESEUS_HOME") or Path(__file__).resolve().parents[2]))}))
+        return
     today = dt.date.today()
     n = 7 if "--week" in sys.argv else 2
     print(json.dumps({"style": normalize(c)["style"], "awake_now": is_awake(c),

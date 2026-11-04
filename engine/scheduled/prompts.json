@@ -1,0 +1,7 @@
+{
+  "morning": "Run the morning briefing exactly as defined in engine/workflows/morning.md.",
+  "nightly": "Run the nightly prep exactly as defined in engine/workflows/nightly.md.",
+  "sync": "Run the quiet sync exactly as defined in engine/workflows/sync.md.",
+  "status": "Run the status check exactly as defined in engine/workflows/status.md.",
+  "unattended": "This is an unattended scheduled run: never wait for input."
+}
