@@ -13,6 +13,8 @@ hands you clear, small decisions.
 **It doesn't live your life for you. It clears the path so you can decide easily.** It never sends a message, email or Slack post on your behalf.
 It drafts; you send.
 
+Theseus has a sister app, [Ariadne](https://github.com/mgilardi/ariadne), which files what piles up on your Mac. [The manifesto](MANIFESTO.md) is what both promise.
+
 > Named after Claude Shannon's *Theseus* (1950), the mechanical mouse that learned its way through a maze. This one learns its way through yours.
 
 ---
