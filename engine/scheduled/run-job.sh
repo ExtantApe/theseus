@@ -33,6 +33,8 @@ until take_lock; do
   sleep 30; WAITED=$((WAITED + 30))
 done
 trap 'rm -f "$LOCK"' EXIT
+# Nobody is watching this run, and it reads text anyone could have written, so it gets no way to reach the web or change settings. Keep in step with the app (lib.rs).
+UNATTENDED_DENY="WebSearch,Edit(config.json)"
 STAMP="$(date +%Y-%m-%d_%H%M)"
 REASON=""
 if [[ "$JOB" == check ]]; then   # frequent check: a cheap local test first, and Claude runs only if something changed (or a full refresh is due)
@@ -55,8 +57,9 @@ PY
 )
 [[ -n "${PROMPT:-}" ]] || { echo "unknown job $JOB"; exit 2; }
 # One hung run must not hold up every later one. perl's alarm survives exec, and launchd won't start this job again while it's running.
-/usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$LIMIT" "$CLAUDE_BIN" -p "$PROMPT" --output-format text > "logs/$JOB-$STAMP.out" 2> "logs/$JOB-$STAMP.err"
+/usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$LIMIT" "$CLAUDE_BIN" -p "$PROMPT" --disallowedTools "$UNATTENDED_DENY" --output-format text > "logs/$JOB-$STAMP.out" 2> "logs/$JOB-$STAMP.err"
 code=$?
+bash engine/scheduled/after-run.sh
 [[ $code -eq 142 ]] && echo "$(date '+%F %T') $JOB stopped after $((LIMIT / 60)) minutes" >> logs/checks.log
 # The changes this run was for count as handled only now that it has finished. If it failed, they wait for the next one.
 if [[ $code -eq 0 && ( "$JOB" == check || "$JOB" == sync ) ]]; then

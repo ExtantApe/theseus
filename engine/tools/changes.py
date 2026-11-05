@@ -183,12 +183,10 @@ def log_rhythm(c: dict, now: float, changed: list[str]):
 
 
 def refresh_copies(c: dict, changed: list[str]):
-    """This check runs from /bin/bash, which has Full Disk Access. Claude Code sessions may not, so they read the saved copies
-    in cache/. Refresh them whenever texts or mail changed, and at least every 30 minutes."""
+    """This check runs from /bin/bash, which has Full Disk Access, and the run it's about to start may not. So it makes fresh copies in cache/ first,
+    and scheduled/after-run.sh removes them when that run ends. No copies stay behind between runs."""
     jobs = []
-    snap = WS / "cache" / "chat-snapshot.db"
-    stale = not snap.exists() or time.time() - snap.stat().st_mtime > 1800
-    if on(c, "texts") and ("texts" in changed or stale):
+    if on(c, "texts"):
         jobs.append([sys.executable, str(WS / "engine/tools/imsg.py"), "--fresh", "doctor"])
     if on(c, "email") and c.get("email_source") == "apple_mail" and "mail" in changed:
         jobs.append([sys.executable, str(WS / "engine/tools/mail.py"), "--fresh", "doctor"])
@@ -257,7 +255,8 @@ def main():
         "last_activity": now if changed else prev.get("last_activity", now),
     })
     log_rhythm(c, now, changed)
-    refresh_copies(c, changed)
+    if run_claude:
+        refresh_copies(c, changed)
     if explain:
         print(json.dumps({"run_claude": run_claude, "reason": reason, "changed_now": changed,
                           "fingerprint": fp}, indent=1))

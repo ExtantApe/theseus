@@ -8,6 +8,7 @@
 use serde::Serialize;
 use serde_json::Value;
 use std::fs::{self, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -138,9 +139,35 @@ fn path_env() -> String {
     format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{}/.local/bin", home().display())
 }
 
+/// The end of a file, without reading the rest of it.
+fn read_end(p: &Path, bytes: u64) -> Vec<u8> {
+    let Ok(mut f) = fs::File::open(p) else { return Vec::new() };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    if f.seek(SeekFrom::Start(len.saturating_sub(bytes))).is_ok() {
+        let _ = f.read_to_end(&mut out);
+    }
+    out
+}
+
 fn log_tail(p: &Path) -> String {
-    let t = fs::read_to_string(p).unwrap_or_default();
+    let end = read_end(p, 8 * 1024);
+    let t = String::from_utf8_lossy(&end);
     t.chars().rev().take(600).collect::<Vec<_>>().into_iter().rev().collect()
+}
+
+/// Remote Control logs every frame of its spinner, and it's always recent, so the age-based cleanup never reaches it. The server has this file
+/// open for appending, so emptying it in place is safe, and it carries on at the new end.
+fn cap_log(p: &Path, max: u64, keep: u64) {
+    if fs::metadata(p).map_or(true, |m| m.len() <= max) {
+        return;
+    }
+    let end = read_end(p, keep);
+    if let Ok(mut f) = OpenOptions::new().write(true).append(true).open(p) {
+        if f.set_len(0).is_ok() {
+            let _ = f.write_all(&end);
+        }
+    }
 }
 
 fn set<F: FnOnce(&mut Status)>(s: &S, f: F) {
@@ -248,11 +275,15 @@ fn remote_loop(s: S) {
             Some((Ok(None), _)) => {}
             Some((Err(e), _)) => set(&s, |st| { st.remote = format!("Unknown: {e}"); st.remote_state = "error".into(); }),
         }
+        cap_log(&s.ws.join("logs/remote-control.log"), 5 * 1024 * 1024, 1024 * 1024);
         thread::sleep(Duration::from_secs(5));
     }
 }
 
 // ---------- jobs (sync, morning, nightly, status) ----------
+
+/// Nobody is watching these runs, and they read text anyone could have written, so they get no way to reach the web or change settings. Keep in step with run-job.sh.
+const UNATTENDED_DENY: &str = "WebSearch,Edit(config.json)";
 
 /// The same words launchd's jobs use (engine/scheduled/prompts.json), so a run doesn't depend on which host started it.
 fn prompt_for(ws: &Path, kind: &str, reason: &str) -> String {
@@ -344,7 +375,7 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
         }
         let limit = config(&s2.ws)["job_time_limit_minutes"].as_u64().unwrap_or(DEFAULT_JOB_MINUTES).max(1);
         let spawned = Command::new(&claude)
-            .args(["-p", &prompt_for(&s2.ws, &kind, &reason), "--output-format", "text"])
+            .args(["-p", &prompt_for(&s2.ws, &kind, &reason), "--disallowedTools", UNATTENDED_DENY, "--output-format", "text"])
             .current_dir(&s2.ws)
             .env("PATH", path_env())
             .env("THESEUS_HOME", &s2.ws)
@@ -386,6 +417,7 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
         if outcome.0 && kind == "sync" {
             let _ = Command::new(PY).args(["engine/tools/changes.py", "--ack"]).current_dir(&s2.ws).env("THESEUS_HOME", &s2.ws).output();
         }
+        let _ = Command::new("/bin/bash").arg("engine/scheduled/after-run.sh").current_dir(&s2.ws).env("THESEUS_HOME", &s2.ws).output();
         let text = fs::read_to_string(&out_path).unwrap_or_default();
         let (_, m) = local_now();
         set(&s2, |st| {
@@ -1027,6 +1059,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_log_is_cut_to_its_end_while_the_writer_keeps_appending() {
+        let p = std::env::temp_dir().join(format!("theseus-log-{}", std::process::id()));
+        fs::write(&p, "a".repeat(100) + "the end").unwrap();
+        let mut writer = OpenOptions::new().append(true).open(&p).unwrap();
+        cap_log(&p, 1000, 7);
+        assert_eq!(fs::read_to_string(&p).unwrap().len(), 107, "under the limit: left alone");
+        cap_log(&p, 50, 7);
+        assert_eq!(fs::read_to_string(&p).unwrap(), "the end");
+        writer.write_all(b" more").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "the end more");
+        assert_eq!(log_tail(&p), "the end more");
+        let _ = fs::remove_file(&p);
+    }
 
     #[test]
     fn job_lock_is_one_at_a_time_and_ignores_the_dead() {

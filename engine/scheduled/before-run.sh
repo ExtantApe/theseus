@@ -3,7 +3,9 @@
 set -u
 WS="${THESEUS_HOME:-$HOME/Theseus}"
 cd "$WS" || exit 1
-mkdir -p logs briefings
+mkdir -p logs briefings cache
+chmod 700 "$WS"   # your list, logs and copies are yours alone
+tmutil isexcluded cache 2>/dev/null | grep -q Excluded || tmutil addexclusion cache 2>/dev/null   # copies don't belong in backups
 # config.json → "ensure_apps": ["Claude", "Mail"]. Apple Mail is added automatically when email_source is "apple_mail".
 /usr/bin/python3 - "$WS/config.json" <<'PY' | while IFS= read -r app; do
 import json, sys

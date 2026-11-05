@@ -106,7 +106,7 @@ def snapshot(src: Path, dst: Path, max_age_min: float, fresh: bool) -> Path:
             # background checks keep fresh.
             age = (time.time() - dst.stat().st_mtime) / 60
             print(f"note: using the saved copy of {src.name} from {age:.0f} min ago (no direct access: {e}). "
-                  f"The background checks refresh it every few minutes.", file=sys.stderr)
+                  f"Runs delete it when they end.", file=sys.stderr)
             return dst
         die_access(e, str(src))
     return dst

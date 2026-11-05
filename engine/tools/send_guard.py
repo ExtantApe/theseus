@@ -26,6 +26,8 @@ WRITE = {"CREATE", "UPDATE", "ADD", "SET", "INSERT", "PATCH", "PUT", "MOVE", "MO
          "JOIN", "LEAVE", "PIN", "UNPIN", "STAR", "LIKE", "REACT", "SYNC", "REDEEM", "PLAN", "GENERATE", "LINK", "UNLINK", "SCHEDULE", "BOOK", "OR", "AND", "THEN"}
 # Writing any of these reaches another person, so it counts as sending. Saving a draft doesn't.
 PEOPLE = {"COMMENT", "COMMENTS", "MESSAGE", "MESSAGES", "CHAT", "EMAIL", "EMAILS", "MAIL", "SMS", "TEXT"}
+# Names with no separator between the words, like SENDMAIL or REPLYALL.
+GLUED_SEND = re.compile(r"(SEND|REPLY|FORWARD|POST|SHARE|PUBLISH)(ALL|TO|NOW|MAIL|EMAIL|MESSAGE|MSG|TEXT|SMS|DM|CHAT|COMMENT)S?")
 COMPOSIO_SHELLS = ("COMPOSIO_REMOTE_BASH_TOOL", "COMPOSIO_REMOTE_WORKBENCH", "COMPOSIO_PROXY_EXECUTE")
 # The iMessage channel's own reply tool. RULES §5b limits it to the self-chat you're texting from.
 EXEMPT_SERVERS = ("plugin_imessage",)
@@ -33,8 +35,8 @@ EXEMPT_SERVERS = ("plugin_imessage",)
 
 def classify(name: str) -> str:
     """send | destroy | read | write. Anything not plainly a read is a write."""
-    words = {w for w in re.split(r"[^A-Z0-9]+", name.upper()) if w}
-    if words & SEND:
+    words = {w for w in re.split(r"[^A-Z0-9]+", re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).upper()) if w}
+    if words & SEND or any(GLUED_SEND.fullmatch(w) for w in words):
         return "send"
     if words & DESTROY:
         return "destroy"

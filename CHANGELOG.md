@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+- **Unattended runs have firmer limits.** Texts, email and web pages are treated as data, never instructions. Runs nobody is watching can't search the web or change your settings, and no session can read your SSH, cloud or signing keys, or your Claude login.
+- **No copies of your messages stay behind.** The copies of Messages, Contacts and Mail are deleted when each run ends, and stay out of Time Machine. Your workspace is now private to your account. A Claude Code session without Full Disk Access can no longer read texts from an old copy, and it says so.
+- **`theseus undo`.** Takes back your last `add` or `done`, until the next sync.
+- **The send guard catches more names.** Tools named like `sendMessage` or `REPLYALL` are refused.
+- **The Remote Control log stays small.** It's capped at 5 MB, and the app no longer reads the whole file when the server restarts.
 - **Fixed two bugs reported by Matt Abate:** underscores disappearing from names in the Today view, and search hits losing their marker.
 - **Shorter commands.** They're now one word, and three no longer share a name with a Claude Code command. `/status` is `/refresh`, `/review` is `/weekly`, `/voice` is `/tone`, `/thread-report` is `/report`, `/text-research` is `/research`, `/sync-check` is `/history`, and `/compliance-check` is `/compliance`. Updating removes the old names, so `/status`, `/review` and `/voice` now reach Claude Code's own commands.
 - **A list of every command.** Run `/commands` in a session, or `theseus help` in Terminal.
