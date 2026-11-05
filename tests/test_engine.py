@@ -373,6 +373,16 @@ class Command(unittest.TestCase):
     def master(self):
         return (self.ws / "data/master.md").read_text()
 
+    def test_a_named_workspace_that_is_not_there_never_falls_back_to_the_real_list(self):
+        empty = self.ws / "not-a-workspace"
+        empty.mkdir()
+        self.env["THESEUS_HOME"] = str(empty)
+        for args in (["add", "should not land"], ["done", "First"], ["next"]):
+            p = self.theseus(*args)
+            self.assertEqual(p.returncode, 1, p.stdout)
+            self.assertIn("no Theseus workspace there", p.stderr)
+        self.assertEqual(self.master(), self.MASTER)
+
     def test_status_counts_what_is_left_without_claude(self):
         p = self.theseus("status")
         self.assertEqual(p.returncode, 0, p.stderr)

@@ -20,10 +20,14 @@ def fail(message, code=1):
 
 
 def workspace():
-    """THESEUS_HOME, then the workspace this copy of the engine lives in, then wherever the installer said, then the default."""
+    """THESEUS_HOME if set, and nothing else then. Otherwise the workspace this copy of the engine lives in, then wherever the installer said, then the default."""
+    home = os.environ.get("THESEUS_HOME")
+    if home:
+        # Someone asked for this workspace by name, so never quietly change the real list instead.
+        if (Path(home) / "config.json").exists():
+            return Path(home)
+        fail(f"THESEUS_HOME is set to {home}, but there's no Theseus workspace there, so nothing changed.")
     candidates = []
-    if os.environ.get("THESEUS_HOME"):
-        candidates.append(Path(os.environ["THESEUS_HOME"]))
     candidates.append(Path(__file__).resolve().parents[2])
     pointer = Path.home() / "Library/Application Support/Theseus/workspace"
     if pointer.exists():
