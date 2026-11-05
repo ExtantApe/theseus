@@ -257,8 +257,7 @@ macOS 14+, Claude Code signed in with your own account, Apple developer tools (`
 Run `scripts/leak-check.sh` before every commit (`scripts/install-hooks.sh` makes it automatic). It blocks anything from your private terms list, plus phone
 numbers and real-looking emails. Changes Theseus makes to its own engine on your Mac are handed back through `data/local-changes.md` (docs/SETUP.md §10a).
 
-## Who made this
-[Michael Gilardi](https://github.com/mgilardi). Questions and ideas: [open an issue](https://github.com/mgilardi/theseus/issues).
+Questions and ideas: [open an issue](https://github.com/mgilardi/theseus/issues).
 
 ---
 **Independent project. Not affiliated with, endorsed by, or sponsored by Anthropic.** Claude and Claude Code are trademarks of Anthropic, PBC.
