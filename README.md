@@ -13,7 +13,7 @@ hands you clear, small decisions.
 **It doesn't live your life for you. It clears the path so you can decide easily.** It never sends a message, email or Slack post on your behalf.
 It drafts; you send.
 
-Theseus has a sister app, [Ariadne](https://github.com/mgilardi/ariadne), which files what piles up on your Mac. [The manifesto](MANIFESTO.md) is what both promise.
+Theseus has a sister app, [Ariadne](https://github.com/ExtantApe/ariadne), which files what piles up on your Mac. [The manifesto](MANIFESTO.md) is what both promise.
 
 > Named after Claude Shannon's *Theseus* (1950), the mechanical mouse that learned its way through a maze. This one learns its way through yours.
 
@@ -98,7 +98,7 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
 ---
 
 ## How to start
-1. **Install:** `git clone https://github.com/mgilardi/theseus && cd theseus && ./install.sh` (or install it as a Claude Code plugin, below).
+1. **Install:** `git clone https://github.com/ExtantApe/theseus && cd theseus && ./install.sh` (or install it as a Claude Code plugin, below).
 2. **Introduce yourself:** run `/theseus:setup` (plugin) or follow [docs/SETUP.md](docs/SETUP.md). Answer honestly. "I'm drowning" is useful context.
 3. **Migrate:** `cd ~/Theseus && claude`, then `/migrate`. Theseus gathers your reminders, old list notes and task apps, removes duplicates,
    proposes categories and drafts your list for your approval.
@@ -112,7 +112,7 @@ A menu bar app that keeps everything running: Remote Control, the checks and you
 
 It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo. Activity shows your thread notes, and Setup lists every command.
 
-1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
+1. Download the `.dmg` from [Releases](https://github.com/ExtantApe/theseus/releases/latest) and drag Theseus to Applications.
 2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
 
    **Terminal (quickest):**
@@ -129,7 +129,7 @@ Then open it, allow what's listed on its Setup tab, then click **Run from this a
 
 Plugin install (inside Claude Code):
 ```
-/plugin marketplace add mgilardi/theseus
+/plugin marketplace add ExtantApe/theseus
 /plugin install theseus@theseus
 /theseus:setup
 ```
@@ -200,7 +200,7 @@ Use only what you have. Everything except Reminders, Calendar and Notes is optio
 | [ClickUp](https://clickup.com) | assignments due; project pointers | official [ClickUp MCP](https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server-1) | ✅ optional |
 | [Skylight](https://www.ourskylight.com) | chores, groceries, to-dos, family events | community [skylight-mcp](https://github.com/chrischall/skylight-mcp) (unofficial) | ⚠️ optional, use at your own risk |
 | [Things 3](https://culturedcode.com/things/) | one-time import (read-only) | built in (local database) | ✅ migration only |
-| [Ariadne](https://github.com/mgilardi/ariadne) | a separate app that files your Mac's files and Notes, with your yes; Theseus only offers it when things pile up | `ariadne` command | ✅ optional |
+| [Ariadne](https://github.com/ExtantApe/ariadne) | a separate app that files your Mac's files and Notes, with your yes; Theseus only offers it when things pile up | `ariadne` command | ✅ optional |
 | iPhone alarms ([Clock](https://support.apple.com/guide/iphone/alarm-iph5a1e0c47f/ios)) | tomorrow's alarms, mismatch warnings | a Shortcut that saves them to iCloud Drive | ✅ optional |
 | Apple Watch alarms | (they never leave the watch) | tell Theseus the times | ❌ not readable |
 | Anything else (Notion, Todoist, Asana, Linear…) | whatever its tools allow | its MCP server or Composio toolkit, plus a line in your profile | 🧪 possible, not built in |
@@ -257,7 +257,7 @@ macOS 14+, Claude Code signed in with your own account, Apple developer tools (`
 Run `scripts/leak-check.sh` before every commit (`scripts/install-hooks.sh` makes it automatic). It blocks anything from your private terms list, plus phone
 numbers and real-looking emails. Changes Theseus makes to its own engine on your Mac are handed back through `data/local-changes.md` (docs/SETUP.md §10a).
 
-Questions and ideas: [open an issue](https://github.com/mgilardi/theseus/issues).
+Questions and ideas: [open an issue](https://github.com/ExtantApe/theseus/issues).
 
 ---
 **Independent project. Not affiliated with, endorsed by, or sponsored by Anthropic.** Claude and Claude Code are trademarks of Anthropic, PBC.

@@ -253,7 +253,7 @@ Every change is logged in `data/log.md`.
 A menu bar app that hosts Remote Control, the change checks and your briefings, so one set of macOS permissions covers all of them (ADR 0006).
 It runs the engine in your workspace, so install Theseus first.
 
-1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
+1. Download the `.dmg` from [Releases](https://github.com/ExtantApe/theseus/releases/latest) and drag Theseus to Applications.
 2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
 
    **Terminal (quickest):**
