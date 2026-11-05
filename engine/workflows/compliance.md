@@ -4,7 +4,7 @@ argument-hint: [--force to re-check even if nothing changed]
 ---
 Follow engine/RULES.md §11 "Compliance check". Steps:
 1. Read docs/COMPLIANCE.md (the assumptions A1–A7 and their source URLs).
-2. Fetch each Anthropic source with WebFetch (if a URL moved, use WebSearch to find the current page on an anthropic.com, claude.com or
+2. Fetch each Anthropic source with WebFetch (if a URL moved, say so in the report when this is an unattended run, which can't search; otherwise use WebSearch to find the current page on an anthropic.com, claude.com or
    claude.ai domain). For each page, extract only the passages relevant to the assumptions and record a short fingerprint
    (title, last-updated date if shown, and a 1–2 line summary of each relevant rule) in data/compliance/<YYYY-MM-DD>.md.
 3. Compare with the previous file in data/compliance/. For every assumption, report one of:

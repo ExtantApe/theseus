@@ -54,7 +54,16 @@
       "mcp__clickup__clickup_create_comment",
       "mcp__clickup__clickup_create_task_comment",
       "mcp__slack__slack_send_message",
-      "mcp__slack__slack_post_message"
+      "mcp__slack__slack_post_message",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/Library/Keychains/**)",
+      "Read(//**/.env)",
+      "Read(//**/*.p12)",
+      "Read(//**/signing.password)"
     ]
   },
   "hooks": {

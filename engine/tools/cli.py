@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 SEP = " · "
+UNDO_FILE = "data/.theseus-undo.json"
 ITEM = re.compile(r"^- \[( |x|X)\] (.*)$")
 
 
@@ -147,9 +148,37 @@ def save_master(ws, before, lines, event):
         os.unlink(tmp)
         return False
     os.replace(tmp, path)
+    line = json.dumps({**event, "time": f"{now:%Y-%m-%d %H:%M}"}, ensure_ascii=False)
     with open(ws / "data/app-edits.jsonl", "a") as f:
-        f.write(json.dumps({**event, "time": f"{now:%Y-%m-%d %H:%M}"}, ensure_ascii=False) + "\n")
+        f.write(line + "\n")
+    (ws / UNDO_FILE).write_text(json.dumps({"before": before, "after": "\n".join(lines), "line": line}, ensure_ascii=False))
     return True
+
+
+def undo(ws):
+    """Takes back the last add or done from this command, as long as nothing has happened to the list since."""
+    last = ws / UNDO_FILE
+    if not last.exists():
+        fail("There's nothing to undo from Terminal. In the app, use Undo.")
+    step = json.loads(last.read_text())
+    edits = ws / "data/app-edits.jsonl"
+    waiting = edits.read_text().splitlines() if edits.exists() else []
+    if step["line"] not in waiting:
+        last.unlink()
+        fail("A sync has already carried that to your other lists, so nothing changed. Change it back in the app.")
+    if read_master(ws) != step["after"]:
+        last.unlink()
+        fail("The list has changed since then, so nothing changed. Use the app to fix it.")
+    path = ws / "data/master.md"
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".master.md.")
+    with os.fdopen(fd, "w") as f:
+        f.write(step["before"])
+    os.replace(tmp, path)
+    event = json.loads(step["line"])
+    with open(edits, "a") as f:
+        f.write(json.dumps({"action": "undo", "of": event, "time": event["time"]}, ensure_ascii=False) + "\n")
+    last.unlink()
+    print(f"Undone: {event['action']} {event['title']}")
 
 
 def add(ws, args):
@@ -307,6 +336,8 @@ def main():
         add(ws, rest)
     elif command == "done":
         done(ws, rest)
+    elif command == "undo" and not rest:
+        undo(ws)
     elif command == "today" and not rest:
         today(ws)
     elif command == "texts":

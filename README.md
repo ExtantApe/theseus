@@ -146,6 +146,7 @@ The `theseus` command works from anywhere, with the same workspace, rules and se
 | `theseus today` | your Today note; instant, no Claude |
 | `theseus add "call the bank" [--to now]` | put something on the list, in NEXT by default; instant, no Claude, and the next sync files it properly |
 | `theseus done "bank"` | check off what matches; instant, no Claude, and the next sync carries it to your other lists |
+| `theseus undo` | take back the last `add` or `done`, until the next sync; instant, no Claude |
 | `theseus texts` | who's waiting on a reply; instant, no Claude (Terminal needs Full Disk Access) |
 | `theseus sync` · `theseus morning` | run that job now and print the result |
 

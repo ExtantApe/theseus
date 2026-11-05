@@ -45,6 +45,7 @@ IN TERMINAL
   theseus today               your Today note (instant)
   theseus add "text"          add to NEXT, or use --to <section> (instant)
   theseus done "text"         check off what matches (instant)
+  theseus undo                take back the last add or done, until the next sync (instant)
   theseus texts               who's waiting on a reply (instant; Terminal needs Full Disk Access)
   theseus sync                sync now
   theseus morning             run the morning briefing now
