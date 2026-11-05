@@ -10,19 +10,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-HELP = """Theseus at the command line.
-
-  theseus                 chat with Theseus in this Terminal
-  theseus "a question"    ask one thing and print the answer
-  theseus status          your list and what's running (instant)
-  theseus next [n]        the top of your list, 5 by default (instant)
-  theseus add "text"      put something on the list, in NEXT unless you add --to <section> (instant)
-  theseus sync            sync now, the same run the schedule starts
-  theseus morning         run the morning briefing now
-  theseus version         the installed version
-
-status, next and add don't use Claude. The rest run on your own Claude Code, with the same rules: nothing is ever sent."""
-
 SEP = " · "
 ITEM = re.compile(r"^- \[( |x|X)\] (.*)$")
 
@@ -206,7 +193,7 @@ def ask(ws, question):
 def main():
     args = sys.argv[1:]
     if args and args[0] in ("help", "--help", "-h"):
-        print(HELP)
+        print((Path(__file__).resolve().parents[1] / "commands.txt").read_text().rstrip())
         return
     ws = workspace()
     if not args:

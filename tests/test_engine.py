@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -535,11 +536,26 @@ imsg.main()
         self.assertIn("Samantha", self.run_tool([], "thread-notes-list").stdout)
 
 
+class CommandList(unittest.TestCase):
+    def test_every_command_is_listed_and_every_listed_command_exists(self):
+        text = (ROOT / "engine/commands.txt").read_text()
+        listed = set(re.findall(r"^  /([a-z-]+)(?=\s)", text, re.M))
+        self.assertEqual(listed, {p.stem for p in (ROOT / "engine/workflows").glob("*.md")})
+
+    def test_scheduled_prompts_point_at_real_workflows(self):
+        for name in re.findall(r"engine/workflows/([a-z-]+)\.md", (ROOT / "engine/scheduled/prompts.json").read_text()):
+            self.assertTrue((ROOT / f"engine/workflows/{name}.md").exists(), name)
+
+    def test_no_command_shares_a_name_with_a_claude_code_one(self):
+        builtin = {"status", "review", "voice", "insights", "undo", "doctor", "update", "help", "stats", "memory", "usage"}
+        self.assertEqual({p.stem for p in (ROOT / "engine/workflows").glob("*.md")} & builtin, set())
+
+
 class OnlyWhenAsked(unittest.TestCase):
     def test_no_scheduled_run_takes_thread_notes_or_insights(self):
         text = (ROOT / "engine/scheduled/prompts.json").read_text()
-        self.assertNotIn("thread-notes", text)
-        self.assertNotIn("thread-insights", text)
+        self.assertNotIn("learn", text)
+        self.assertNotIn("mirror", text)
 
 
 class Versions(unittest.TestCase):

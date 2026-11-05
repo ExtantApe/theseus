@@ -142,7 +142,7 @@ back in plain words the first time ("Every other Friday starting Nov 7. Right?")
 To change a repeat: `bin/ek update --id … --recur "<RRULE>"`. To stop one: `--clear-recur` (ask first). Reminder output shows the rule in `recurrence`.
 
 ---------------------------------------------------------------------------
-## 3. Sync rules (every `/status`, `/sync`, `/inbox`, `/morning`, `/nightly`)
+## 3. Sync rules (every `/refresh`, `/sync`, `/inbox`, `/morning`, `/nightly`)
 
 **First, what the user did in Theseus.app.** The app edits `data/master.md` directly and logs each action in `data/app-edits.jsonl`, one JSON object per line
 (`action`: `complete`, `reopen`, `move`, `add`, `edit`, `remove` or `undo`, with `id`, `title`, and for moves `from`, `to`, `above`). An `undo` line cancels the action in its `of` field, so
@@ -246,7 +246,7 @@ For each note:
 ---------------------------------------------------------------------------
 ## 5. Briefings
 
-### `/status` (any time) always re-runs everything fresh
+### `/refresh` (any time) always re-runs everything fresh
 Today-note read-back (below), then sync (§3) with auto-detection, inbox (§4), texts, calendar, email and the Slack bridge, using whatever is enabled.
 Never reuse an earlier briefing. Output, phone-friendly, no preamble:
 ```
@@ -266,7 +266,7 @@ self-chat), send a compact version (≤ 1,200 characters) and offer "reply 'more
 
 ### 📌 The pinned Today note (`config.today_note_title`, default "📌 Today")
 The user's offline dashboard. If they can't reach Claude, this note is enough to run their day. **Every run that
-touches state** (`/status`, `/sync`, `/inbox`, `/add`, `/next`, `/morning`, `/nightly`, `/rank`) ends by republishing it
+touches state** (`/refresh`, `/sync`, `/inbox`, `/add`, `/next`, `/morning`, `/nightly`, `/rank`) ends by republishing it
 from `data/today.md` with `notes.py publish --title "<today_note_title>" --file data/today.md --force` (always *after* the read-back below, so `--force` never loses their edits). Same note every time, so
 the user's pin sticks. Layout, phone-first and short:
 ```
@@ -404,10 +404,10 @@ clears. Never just do it, and never stack several offers.
 | ≥ 3 "Did you already…?" confirmations | "30 seconds: 4 things look done. Confirm and they're off your list." |
 | ≥ 5 stale items (untouched 30+ days) | "5 min to prune? 7 old items: keep, push to Eventually, or drop." |
 | ≥ `unfiled` items from `ariadne count` (only if `integrations.ariadne`) | "Got 3 min? 14 files in Downloads. Ariadne can suggest a home for each; nothing moves until you say yes." |
-| `/review` not run in 8+ days | "Weekly reset? ~10 min: archive, re-rank, catch anything slipping." |
+| `/weekly` not run in 8+ days | "Weekly reset? ~10 min: archive, re-rank, catch anything slipping." |
 | WAITING ON items 7+ days old | "Want nudge drafts for 2 things you're still waiting on?" |
 
-**When to ask:** only at natural moments: the end of `/status` or `/next`, the morning Today note, the start of a free calendar block of
+**When to ask:** only at natural moments: the end of `/refresh` or `/next`, the morning Today note, the start of a free calendar block of
 15+ min, or when the user signals energy (§7). **Not** during a meeting, within 10 min of one, in the last hour before bed, or when they've
 said they're low or overwhelmed (then offer at most the 2-minute version, or nothing).
 
@@ -439,27 +439,27 @@ alarms. **Apple Watch alarms never leave the watch.** Fixed alarm times the user
 ### Pairwise ranking (`/rank`)
 Compare two items and keep the more important one on top (bubble-sort style), but efficiently:
 - **New items:** binary insertion. Compare with the middle of the section, then the middle of the remaining half, and so on (~4 questions for 15 items).
-- **Re-sorting** (`/rank now`, weekly `/review`): one bubble pass over the top ~7, stopping early when nothing swaps.
+- **Re-sorting** (`/rank now`, weekly `/weekly`): one bubble pass over the top ~7, stopping early when nothing swaps.
 - Format: `Which first? ①  Renew business license (#SideBiz, due 11/14)  or  ②  Draft budget memo (#Work, no date)`
   Accept "1", "2", "same", "skip", or a reason. **Reasons are gold:** record them as hypotheses.
 - Skip pairs a confirmed Rule already decides, and say so. Max 8 questions per sitting. Show the new order after.
 
 ### Learning loop
-- After `/status` or `/review`, compare your ranking with what actually happened. Record
+- After `/refresh` or `/weekly`, compare your ranking with what actually happened. Record
   `- [hypothesis · N obs · first seen YYYY-MM-DD] …`.
 - At ≥ 3 observations, ask once: "I've noticed X. Should I always rank that way?" Confirmed → `## Rules`.
   Rejected → `## Rejected`.
 - Explicit statements go straight into Rules.
 
 ---------------------------------------------------------------------------
-## 9. Text research (`/thread-report`, `/text-research`)
+## 9. Text research (`/report`, `/research`)
 - `export` first (split by month or year for long threads), then work from the files.
 - Run `imsg.py sync-status` first and state completeness caveats.
 - **Neutral-account standard:** chronological, attributed, timestamped. Every claim cites
   `[YYYY-MM-DD HH:MM, Sender]`. Keep what was said separate from interpretation, which goes in its own labeled section
   or is omitted if they asked for neutral only. Quote exactly. Note edits, unsent messages and gaps. Don't infer motives.
 - Long threads: monthly summaries into `exports/<slug>/summaries/`, then synthesize. Never skip a period silently.
-- `/thread-notes` and `/thread-insights` run only when the user asks for them, never from a scheduled run or a sync.
+- `/learn` and `/mirror` run only when the user asks for them, never from a scheduled run or a sync.
 
 ---------------------------------------------------------------------------
 ## 10. Email, Slack bridge, ClickUp
@@ -481,7 +481,7 @@ Compare two items and keep the more important one on top (bubble-sort style), bu
 
 ---------------------------------------------------------------------------
 ## 11. Housekeeping
-- Weekly `/review`: archive DONE, re-rank, surface items untouched for 30+ days (suggest EVENTUALLY or drop), follow up on
+- Weekly `/weekly`: archive DONE, re-rank, surface items untouched for 30+ days (suggest EVENTUALLY or drop), follow up on
   WAITING ON items older than 7 days (drafts only), propose priority rules, refresh `data/voice.md` monthly.
 - Keep `data/categories.md` short. Propose merges for categories with fewer than 2 items over a month.
 
@@ -492,14 +492,14 @@ what, why and how it was tested. If you change anything under `engine/`, save a 
 the same run. These never go on the master list or the Today note; tell the user in the chat when you add one. After an update or reinstall,
 check that each pending applied change survived, and say so if one was lost. Never edit the source repo or push anything without the user's yes.
 
-### Rhythm learning (weekly, in `/review`)
+### Rhythm learning (weekly, in `/weekly`)
 If `schedule.adapt` is true, compare `data/rhythm.json` (first and last activity per day, recorded by the checks) with the configured
 schedule. When a day group is consistently off by 45+ minutes for 2+ weeks, propose one change ("Weekends: you're usually up around
 9:15, not 8:30. Update?"). Never change `schedule` without a yes. For fluid schedules, also suggest the earliest/latest bounds.
 
 ### Compliance check (monthly, automatic)
 Theseus has to stay within Anthropic's rules (docs/COMPLIANCE.md lists every assumption and its source). During `/nightly`, if
-`data/state.json → compliance_last_checked` is missing or more than 30 days old, run `/compliance-check` (engine/workflows/compliance-check.md).
+`data/state.json → compliance_last_checked` is missing or more than 30 days old, run `/compliance` (engine/workflows/compliance.md).
 Also run it when the user asks, or when a run hits an authentication or usage-policy error. It only *reads* Anthropic's pages
 and *proposes* changes. It never edits engine files, settings or schedules without the user's yes. The single exception: if a current rule clearly prohibits
 something Theseus is doing (for example, the scheduled jobs), pause that job (`engine/install.sh --unschedule`), say why in the Today note,

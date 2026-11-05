@@ -1,0 +1,51 @@
+THESEUS COMMANDS
+
+Inside Claude Code, in your Theseus workspace. Plain words work too:
+"what's next, I have 20 minutes" is the same as /next.
+
+YOUR LIST
+  /next [what's done, time]   the best thing to do now
+  /add <anything>             add a task, reminder, event, grocery or chore
+  /inbox                      process your Notes inbox
+  /rank [now]                 quick A-or-B choices to put things in order
+  /refresh                    re-run everything, fresh
+  /weekly                     weekly cleanup: archive, stale items, rules
+
+TEXTS
+  /texts                      who's waiting on a reply
+  /reply <name>               draft a reply in your words (never sent)
+  /tone                       refresh your writing style
+  /history [count]            is all your message history on this Mac?
+
+UNDERSTANDING A CONVERSATION (only when you ask)
+  /learn <name>               deep, neutral notes on how you two talk
+  /mirror <name> [focus]      an honest outside read on how you come across
+  /report <name> [since]      neutral, timestamped account of a long thread
+  /research <topic>           search and compile across your texts
+
+RUN NOW AND OTHER
+  /morning                    the morning briefing
+  /nightly                    the evening prep
+  /sync                       a quiet sync
+  /slack [answers]            Slack check-in
+  /migrate                    one-time move from Reminders, Things and old notes
+  /compliance                 re-read Anthropic's rules against how Theseus works
+  /commands                   this list
+
+SETTING UP
+  /theseus:setup              the setup interview
+  /theseus:doctor             health check
+  /theseus:update             update the engine
+
+IN TERMINAL
+  theseus                     chat with Theseus
+  theseus "a question"        ask one thing and print the answer
+  theseus status              your list and what's running (instant)
+  theseus next [n]            the top of your list, 5 by default (instant)
+  theseus add "text"          add to NEXT, or use --to <section> (instant)
+  theseus sync                sync now
+  theseus morning             run the morning briefing now
+  theseus version             the installed version
+  theseus help                this list
+
+Instant commands don't use Claude. Nothing is ever sent.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- **Shorter commands.** They're now one word, and three no longer share a name with a Claude Code command. `/status` is `/refresh`, `/review` is `/weekly`, `/voice` is `/tone`, `/thread-report` is `/report`, `/text-research` is `/research`, `/sync-check` is `/history`, and `/compliance-check` is `/compliance`. Updating removes the old names, so `/status`, `/review` and `/voice` now reach Claude Code's own commands.
+- **A list of every command.** Run `/commands` in a session, or `theseus help` in Terminal.
+- **Thread notes, when you ask.** `/learn Sam` keeps deep, neutral notes on how you and Sam talk. It reads only messages the notes haven't covered, and logs every check, including the ones that change nothing.
+- **An outside read, when you ask.** `/mirror Sam` gives an unbiased opinion on how you come across in that conversation, with dated examples.
+
 ## 0.5.3
 - **A new icon and color.** Theseus is now a compass on seafoam, with a deep teal accent inside the app. Ariadne gets a matching change.
 

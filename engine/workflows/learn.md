@@ -26,4 +26,4 @@ The notes are an observer's detailed record of how the user and this person inte
 7. Always record the check, even if nothing changed: `python3 engine/tools/imsg.py thread-notes-mark "$ARGUMENTS" --result updated` or `--result unchanged`.
 8. If messages are left and the user agreed to read them, repeat from step 1.
 
-Thread notes stay in `data/thread-notes/`. Never paste them into a draft, a shared list or a message to someone else. For an opinion on how the user communicates, that's `/thread-insights`.
+Thread notes stay in `data/thread-notes/`. Never paste them into a draft, a shared list or a message to someone else. For an opinion on how the user communicates, that's `/mirror`.

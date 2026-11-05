@@ -1,7 +1,7 @@
-# Compliance assumptions (checked monthly by /compliance-check)
+# Compliance assumptions (checked monthly by /compliance)
 
 Theseus is designed around these assumptions. Each one cites the rule it depends on. If a source changes,
-`/compliance-check` re-reads it, compares it against this list, and proposes changes. It never edits the engine on its own.
+`/compliance` re-reads it, compares it against this list, and proposes changes. It never edits the engine on its own.
 
 | # | Assumption | Source |
 |---|---|---|
