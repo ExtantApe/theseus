@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Fixed two bugs reported by Matt Abate:** underscores disappearing from names in the Today view, and search hits losing their marker.
 - **Shorter commands.** They're now one word, and three no longer share a name with a Claude Code command. `/status` is `/refresh`, `/review` is `/weekly`, `/voice` is `/tone`, `/thread-report` is `/report`, `/text-research` is `/research`, `/sync-check` is `/history`, and `/compliance-check` is `/compliance`. Updating removes the old names, so `/status`, `/review` and `/voice` now reach Claude Code's own commands.
 - **A list of every command.** Run `/commands` in a session, or `theseus help` in Terminal.
 - **More from Terminal, without Claude.** `theseus today` prints your Today note, `theseus done "bank"` checks off what matches, and `theseus texts` shows who's waiting on a reply.
