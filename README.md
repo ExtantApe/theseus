@@ -110,7 +110,7 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
 ### Theseus for Mac (recommended once you're set up)
 A menu bar app that keeps everything running: Remote Control, the checks and your briefings. You grant macOS permissions once, to the app, and everything it starts can use them.
 
-It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo.
+It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo. Activity shows your thread notes, and Setup lists every command.
 
 1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
 2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
@@ -143,7 +143,10 @@ The `theseus` command works from anywhere, with the same workspace, rules and se
 | `theseus "what's due this week?"` | ask one thing and print the answer |
 | `theseus status` | your list and what's running; instant, no Claude |
 | `theseus next [n]` | the top of your list; instant, no Claude |
+| `theseus today` | your Today note; instant, no Claude |
 | `theseus add "call the bank" [--to now]` | put something on the list, in NEXT by default; instant, no Claude, and the next sync files it properly |
+| `theseus done "bank"` | check off what matches; instant, no Claude, and the next sync carries it to your other lists |
+| `theseus texts` | who's waiting on a reply; instant, no Claude (Terminal needs Full Disk Access) |
 | `theseus sync` · `theseus morning` | run that job now and print the result |
 
 Only one job runs at a time. If the app or the schedule is already running one, `theseus sync` says so and stops. Anything you start from Terminal uses Terminal's macOS permissions, so Terminal needs the same access the app has.
@@ -231,6 +234,16 @@ Either way, Theseus never posts to Slack.
 - Messages, Mail, Contacts and Things are read **read-only from snapshots**. A hook on every connector (`engine/tools/send_guard.py`) refuses anything that sends, in every session, and unattended runs can only read connectors and make the specific updates a sync needs. Deleting needs you. Every change Theseus makes is logged.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
+## What it costs
+Theseus itself is free. You only pay for Claude, and anything that just shows you a file or changes your list from Terminal doesn't use it.
+
+| What | Cost | Needed for |
+|---|---|---|
+| [Claude Pro, Max or Ultra](https://claude.com/pricing) | $20, $100 or $200 a month | Claude Code. The free Claude plan doesn't include it |
+| A Mac that stays on | the one you own | Where Theseus lives |
+| Apple Developer Program | not needed | Theseus isn't notarized, so you allow it once on first launch |
+| [Composio](https://composio.dev) | see their pricing | Optional. Skip it if you use official connectors or Apple Mail and Calendar |
+
 ## What's next
 - **Theseus for Mac, next steps:** one download with a first-run wizard in place of Terminal, drag-to-rank, and the reply questionnaire as a native form.
 - **Command center:** a wall or desk display (Raspberry Pi or any monitor, landscape or portrait), wall-safe by default.
@@ -243,6 +256,9 @@ macOS 14+, Claude Code signed in with your own account, Apple developer tools (`
 ## Contributing
 Run `scripts/leak-check.sh` before every commit (`scripts/install-hooks.sh` makes it automatic). It blocks anything from your private terms list, plus phone
 numbers and real-looking emails. Changes Theseus makes to its own engine on your Mac are handed back through `data/local-changes.md` (docs/SETUP.md §10a).
+
+## Who made this
+[Michael Gilardi](https://github.com/mgilardi). Questions and ideas: [open an issue](https://github.com/mgilardi/theseus/issues).
 
 ---
 **Independent project. Not affiliated with, endorsed by, or sponsored by Anthropic.** Claude and Claude Code are trademarks of Anthropic, PBC.

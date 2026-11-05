@@ -610,6 +610,40 @@ fn schedule(s: State<'_, S>) -> Value {
         .and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(Value::Null)
 }
 
+/// Thread notes, read-only: taking them stays on the command line, when the user asks.
+#[tauri::command(async)]
+fn thread_notes(s: State<'_, S>) -> Vec<Value> {
+    let mut out: Vec<Value> = fs::read_dir(s.ws.join("data/thread-notes")).into_iter().flatten().flatten().filter_map(|e| {
+        let path = e.path();
+        if path.extension()? != "json" || !path.with_extension("md").exists() {
+            return None;
+        }
+        let led: Value = serde_json::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+        Some(serde_json::json!({
+            "id": path.file_stem()?.to_str()?,
+            "label": led["label"],
+            "last_updated": led["last_updated"],
+            "last_checked": led["last_checked"],
+            "seen": led["seen"].as_array().map_or(0, |a| a.len()),
+        }))
+    }).collect();
+    out.sort_by(|a, b| b["last_checked"].as_str().cmp(&a["last_checked"].as_str()));
+    out
+}
+
+#[tauri::command(async)]
+fn read_thread_note(id: String, s: State<'_, S>) -> Result<String, String> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Not a thread note.".into());
+    }
+    fs::read_to_string(s.ws.join("data/thread-notes").join(format!("{id}.md"))).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+fn read_commands(s: State<'_, S>) -> String {
+    fs::read_to_string(s.ws.join("engine/commands.txt")).unwrap_or_default()
+}
+
 #[tauri::command]
 fn set_paused(paused: bool, s: State<'_, S>) {
     s.paused.store(paused, Ordering::SeqCst);
@@ -866,7 +900,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
-            get_status, read_today, read_master, write_master, save_conflict, publish_master, run_now, set_paused, recent_runs, read_run, schedule, permissions, request_permission, open_privacy, take_over, hand_back
+            get_status, read_today, read_master, write_master, save_conflict, publish_master, run_now, set_paused, recent_runs, read_run, schedule, thread_notes, read_thread_note, read_commands, permissions, request_permission, open_privacy, take_over, hand_back
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]

@@ -13,3 +13,4 @@ license notice next to the code, and we list them here. Ideas and designs (not c
 - OpenClaw (MIT): personal-assistant-over-chat patterns and macOS integration approaches.
 - The Claude Code "chief of staff" community projects on GitHub (topic: ai-chief-of-staff).
 - Home-automation community write-ups on reading iPhone alarms with Shortcuts.
+- [life](https://github.com/mattabate/life-distributable) by Matt Abate: the idea of a plain costs table and a "who made this" section in the README. Matt also reported the first two bugs.

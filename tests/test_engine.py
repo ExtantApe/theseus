@@ -395,6 +395,43 @@ class Command(unittest.TestCase):
         self.assertEqual(self.MASTER, next((self.ws / "data/archive").glob("master-app-*.md")).read_text())
         self.assertFalse(self.calls.exists())
 
+    def test_done_moves_the_item_and_its_notes_and_reaches_the_next_sync(self):
+        p = self.theseus("done", "first")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        stamp = f"{dt.date.today().month}/{dt.date.today().day}"
+        self.assertNotIn("- [ ] First", self.master())
+        self.assertIn(f"## ✅ DONE\n- [x] First · #Work · due Thu 11/5 · done {stamp} · was:now · id:t1\n  - a note\n- [x] Finished", self.master())
+        event = json.loads((self.ws / "data/app-edits.jsonl").read_text())
+        self.assertEqual((event["action"], event["id"], event["title"], event["repeating"]), ("complete", "t1", "First", False))
+        self.assertFalse(self.calls.exists())
+
+    def test_done_on_a_repeating_item_is_done_for_now(self):
+        (self.ws / "data/master.md").write_text(self.master().replace("- [ ] Second · #Home", "- [ ] Water plants · ↻ weekly · id:t9\n- [ ] Second · #Home"))
+        self.assertEqual(self.theseus("done", "water").returncode, 0)
+        stamp = f"{dt.date.today().month}/{dt.date.today().day}"
+        self.assertIn(f"- [ ] Water plants · ↻ weekly · done for now {stamp} · id:t9", self.master())
+        self.assertTrue(json.loads((self.ws / "data/app-edits.jsonl").read_text())["repeating"])
+        self.assertEqual(self.theseus("done", "water").returncode, 1)  # it's no longer open
+
+    def test_done_changes_nothing_when_unclear_or_unknown(self):
+        before = self.master()
+        self.assertEqual(self.theseus("done", "e").returncode, 3)    # several titles match
+        self.assertEqual(self.theseus("done", "nothing like it").returncode, 1)
+        self.assertEqual(self.theseus("done", "finished").returncode, 1)    # already done
+        self.assertEqual(self.theseus("done").returncode, 2)
+        self.assertEqual(self.master(), before)
+
+    def test_done_by_id(self):
+        self.assertEqual(self.theseus("done", "t4").returncode, 0)
+        self.assertIn("- [x] Later on", self.master())
+
+    def test_today_and_texts_never_reach_claude(self):
+        self.assertEqual(self.theseus("today").returncode, 1)
+        (self.ws / "data/today.md").write_text("# Today\nhello\n")
+        self.assertEqual(self.theseus("today").stdout, "# Today\nhello\n")
+        self.theseus("texts")
+        self.assertFalse(self.calls.exists())
+
     def test_add_to_a_section_you_name(self):
         self.theseus("add", "urgent", "--to", "now")
         self.assertIn("- [ ] Second · #Home · id:t3\n- [ ] urgent · #Inbox\n\n## ⏭️ NEXT", self.master())

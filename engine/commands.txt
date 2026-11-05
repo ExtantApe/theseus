@@ -42,7 +42,10 @@ IN TERMINAL
   theseus "a question"        ask one thing and print the answer
   theseus status              your list and what's running (instant)
   theseus next [n]            the top of your list, 5 by default (instant)
+  theseus today               your Today note (instant)
   theseus add "text"          add to NEXT, or use --to <section> (instant)
+  theseus done "text"         check off what matches (instant)
+  theseus texts               who's waiting on a reply (instant; Terminal needs Full Disk Access)
   theseus sync                sync now
   theseus morning             run the morning briefing now
   theseus version             the installed version

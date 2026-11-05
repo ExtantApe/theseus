@@ -45,7 +45,7 @@ Wed 11/4: 9:00 All Hands
 `;
 let file=MASTER, writes=0, publishes=0; const log=[], conflicts=[];
 const st={workspace:'~/Theseus',claude:'~/.local/bin/claude',hosting:true,paused:false,remote:'ok',remote_state:'running',last_check:'',job_running:null,last_job:'',last_job_output:'',last_answer:'',app_version:'0.5.1',engine_version:'0.5.1',auto_host:true,can_host:true};
-const H={get_status:()=>st,read_today:()=>TODAY,read_master:()=>file,write_master:(a)=>{if(a.base!==file)throw 'conflict';file=a.text;writes++;log.push(...a.events);return null},save_conflict:(a)=>{conflicts.push(a.text);return 'data/archive/master-conflict-x.md'},publish_master:()=>{publishes++;return ''},run_now:()=>null,recent_runs:()=>[],schedule:()=>({days:[{}]}),permissions:()=>[]};
+const H={thread_notes:()=>[{id:'abc123',label:'Sam Rivera',last_updated:'2026-11-01 09:00:00',last_checked:'2026-11-05 10:00:00',seen:120}],read_thread_note:()=>'# Sam Rivera\nShort replies.',read_commands:()=>'THESEUS COMMANDS\n  /next  the best thing to do now',get_status:()=>st,read_today:()=>TODAY,read_master:()=>file,write_master:(a)=>{if(a.base!==file)throw 'conflict';file=a.text;writes++;log.push(...a.events);return null},save_conflict:(a)=>{conflicts.push(a.text);return 'data/archive/master-conflict-x.md'},publish_master:()=>{publishes++;return ''},run_now:()=>null,recent_runs:()=>[],schedule:()=>({days:[{}]}),permissions:()=>[]};
 const srv=http.createServer((q,r)=>{if(q.url==='/invoke'){let b='';q.on('data',d=>b+=d);q.on('end',()=>{const{cmd,args}=JSON.parse(b);try{r.end(JSON.stringify(H[cmd]?H[cmd](args):null))}catch(e){r.writeHead(500);r.end(String(e))}});return}
  const f=DIST+(q.url==='/'?'/index.html':q.url);if(!fs.existsSync(f)){r.writeHead(404);return r.end()}r.writeHead(200,{'content-type':f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':f.endsWith('.svg')?'image/svg+xml':'text/html'});r.end(fs.readFileSync(f))}).listen(0);
 const url=`http://127.0.0.1:${srv.address().port}/`;const b=await webkit.launch();const p=await b.newPage({viewport:{width:1040,height:800},colorScheme:'light'});const errs=[];p.on('pageerror',e=>errs.push(String(e)));
@@ -112,6 +112,8 @@ await p.click('.segmented >> text=List');await p.click('nav >> text=Today');{con
 st.last_answer='Here is your answer';st.last_job_output='sync output';await p.fill('.ask input','what next');await p.keyboard.press('Enter');st.job_running='ask';await sleep(3300);st.job_running=null;await sleep(3300);ok('shows the answer, not the last job',await p.isVisible('text=Here is your answer'));
 // version check
 st.engine_version='0.4.0';await sleep(3300);ok('warns when the engine is out of date',await p.isVisible('text=install.sh --update'));st.engine_version='0.5.1';
+await p.click('nav button:has-text("Activity")');await p.waitForSelector('text=Sam Rivera');ok('Activity lists thread notes with both marks',await p.isVisible('text=checked 2026-11-05 10:00:00'));await p.click('button:has-text("Sam Rivera")');await p.waitForSelector('text=Short replies.');ok('a thread note opens',await p.isVisible('text=Short replies.'));
+await p.click('nav button:has-text("Setup")');await p.click('button:has-text("Commands")');await p.waitForSelector('text=THESEUS COMMANDS');ok('Setup shows the command list',await p.isVisible('text=THESEUS COMMANDS'));
 await sleep(100);ok('still no page errors',errs.length===0);if(errs.length)console.log(errs.slice(0,3));
 await b.close();srv.close();
 
