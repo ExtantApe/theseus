@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 bash scripts/leak-check.sh
-for f in install.sh engine/install.sh engine/scheduled/*.sh scripts/*.sh; do bash -n "$f"; done
+for f in install.sh engine/install.sh engine/bin/theseus engine/scheduled/*.sh scripts/*.sh; do bash -n "$f"; done
 PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 - <<'PY'
 import glob, json
 for f in glob.glob("engine/tools/*.py"):

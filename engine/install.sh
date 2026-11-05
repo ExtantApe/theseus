@@ -51,9 +51,21 @@ copy_engine() {
   [[ -e "$WS/profile.md" ]]  || cp "$WS/engine/templates/profile.md"  "$WS/profile.md"
   [[ -e "$WS/CLAUDE.md" ]]   || cp "$WS/engine/templates/CLAUDE.md"   "$WS/CLAUDE.md"
   printf 'cache/\nexports/\nlogs/\nbriefings/\ndata/\nprofile.md\nconfig.json\nbin/\n' > "$WS/.gitignore"
-  chmod +x "$WS/engine/tools/"*.py "$WS/engine/scheduled/"*.sh 2>/dev/null || true
+  chmod +x "$WS/engine/tools/"*.py "$WS/engine/scheduled/"*.sh "$WS/engine/bin/"* 2>/dev/null || true
   # Theseus.app starts from Finder without your shell's THESEUS_HOME, so this is how it finds a workspace that isn't ~/Theseus.
   mkdir -p "$HOME/Library/Application Support/Theseus" && printf '%s\n' "$WS" > "$HOME/Library/Application Support/Theseus/workspace"
+}
+
+link_command() {
+  # So `theseus` works from anywhere, the way `ariadne` does. It never replaces a command that isn't this workspace's own.
+  local target="$WS/engine/bin/theseus" link="$HOME/.local/bin/theseus"
+  mkdir -p "$HOME/.local/bin"
+  if [[ -e "$link" || -L "$link" ]] && [[ "$(readlink "$link")" != "$target" ]]; then
+    echo "⚠️  Left $link as it is, because it isn't this workspace's. To use this one, point it at $target"
+    return 0
+  fi
+  ln -sf "$target" "$link"
+  case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "⚠️  To run theseus from anywhere, add ~/.local/bin to your PATH." ;; esac
 }
 
 refresh_bin() {
@@ -267,10 +279,10 @@ PY
 }
 
 case "$MODE" in
-  install)    copy_engine; build_ek; checks || true
+  install)    copy_engine; link_command; build_ek; checks || true
               echo; echo "✅ Theseus installed at $WS"
               echo "Next: cd \"$WS\" && claude   then run /theseus:setup (plugin) or follow docs/SETUP.md, then /migrate" ;;
-  --update)   copy_engine; build_ek; refresh_bin; migrate_connectors
+  --update)   copy_engine; link_command; build_ek; refresh_bin; migrate_connectors
               if [[ $ON_MAC == 1 && -f "$HOME/Library/LaunchAgents/com.theseus.remote.plist" ]]; then
                 launchctl kickstart -k "gui/$(id -u)/com.theseus.remote" 2>/dev/null && echo "Restarted Remote Control so it uses the new engine."
               fi

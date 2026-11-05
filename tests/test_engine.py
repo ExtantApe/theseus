@@ -305,9 +305,132 @@ class Install(unittest.TestCase):
         self.script("migrate_connectors")
         self.assertEqual(json.loads((ws / "config.json").read_text())["unattended_read_connectors"], [])
 
+    def test_command_is_linked_but_never_replaces_someone_elses(self):
+        (self.ws / "T").mkdir()
+        self.assertEqual(self.script("link_command").returncode, 0)
+        link = self.ws / ".local/bin/theseus"
+        self.assertEqual(os.readlink(link), str(self.ws / "T/engine/bin/theseus"))
+        link.unlink()
+        link.write_text("mine")
+        p = self.script("link_command")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(link.read_text(), "mine")
+        self.assertIn("Left", p.stdout)
+
     def test_installers_stay_identical(self):
         strip = lambda t: "\n".join(l for l in t.splitlines() if not l.startswith("SRC="))  # noqa: E731
         self.assertEqual(strip((ROOT / "install.sh").read_text()), strip((ROOT / "engine/install.sh").read_text()))
+
+
+class Command(unittest.TestCase):
+    """The theseus command, in a throwaway workspace with a fake Claude. It must never reach the real one."""
+
+    MASTER = ("# ★ Master List\n_Updated_\n\n## 🔥 NOW\n- [ ] First · #Work · due Thu 11/5 · id:t1\n  - a note\n- [ ] Repeats · ↻ daily · done for now 11/4 · id:t2\n"
+              "- [ ] Second · #Home · id:t3\n\n## ⏭️ NEXT\n- [ ] Later on · #Home · id:t4\n  - its note\n\n## ✅ DONE\n- [x] Finished · done 11/3 · id:t5\n")
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-cli-"))
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        (self.ws / "data").mkdir()
+        (self.ws / "data/master.md").write_text(self.MASTER)
+        (self.ws / "config.json").write_text(json.dumps({"scheduler_host": "app"}))
+        shutil.copytree(ROOT / "engine", self.ws / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+        fake = self.ws / "fake"
+        fake.mkdir()
+        self.calls = self.ws / "claude-calls"
+        (fake / "claude").write_text(f'#!/bin/bash\necho "$PWD|$*" >> "{self.calls}"\necho fake answer\n')
+        (fake / "claude").chmod(0o755)
+        self.env = {**os.environ, "THESEUS_HOME": str(self.ws), "HOME": str(self.ws), "PATH": f"{fake}:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
+        # What the installer does for the copy in bin/.
+        script = self.ws / "engine/scheduled/run-job.sh"
+        script.write_text(script.read_text().replace("__CLAUDE_BIN__", str(fake / "claude")))
+
+    def theseus(self, *args):
+        return subprocess.run(["/bin/bash", str(self.ws / "engine/bin/theseus"), *args], capture_output=True, text=True, env=self.env, stdin=subprocess.DEVNULL)
+
+    def master(self):
+        return (self.ws / "data/master.md").read_text()
+
+    def test_status_counts_what_is_left_without_claude(self):
+        p = self.theseus("status")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("2 NOW · 1 NEXT", p.stdout)
+        self.assertNotIn("DONE", p.stdout)
+        self.assertFalse(self.calls.exists())
+
+    def test_next_shows_open_items_with_dates(self):
+        p = self.theseus("next")
+        self.assertEqual(p.stdout, "1. First · due Thu 11/5\n2. Second\n")
+        self.assertEqual(self.theseus("next", "1").stdout, "1. First · due Thu 11/5\n…and 1 more in NOW.\n")
+        self.assertFalse(self.calls.exists())
+
+    def test_add_lands_in_the_section_and_reaches_the_next_sync(self):
+        p = self.theseus("add", "call · the bank")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("- [ ] Later on · #Home · id:t4\n  - its note\n- [ ] call - the bank · #Inbox\n\n## ✅ DONE", self.master())
+        event = json.loads((self.ws / "data/app-edits.jsonl").read_text())
+        self.assertEqual((event["action"], event["title"], event["to"]), ("add", "call - the bank", "next"))
+        self.assertEqual(self.MASTER, next((self.ws / "data/archive").glob("master-app-*.md")).read_text())
+        self.assertFalse(self.calls.exists())
+
+    def test_add_to_a_section_you_name(self):
+        self.theseus("add", "urgent", "--to", "now")
+        self.assertIn("- [ ] Second · #Home · id:t3\n- [ ] urgent · #Inbox\n\n## ⏭️ NEXT", self.master())
+
+    def test_add_refuses_rather_than_guessing(self):
+        for args in (["add"], ["add", "x", "--to", "nope"], ["add", "x", "--to", "done"], ["add", "x", "--to"]):
+            self.assertNotEqual(self.theseus(*args).returncode, 0, args)
+        self.assertEqual(self.master(), self.MASTER)
+        self.assertFalse((self.ws / "data/app-edits.jsonl").exists())
+
+    def test_a_sync_you_ask_for_runs_even_when_the_app_hosts(self):
+        p = self.theseus("sync")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("fake answer", p.stdout)
+        self.assertIn("quiet sync", self.calls.read_text())
+        self.assertFalse((self.ws / "data/.job.lock").exists())
+
+    def test_a_scheduled_job_still_stands_down_for_the_app(self):
+        env = {k: v for k, v in self.env.items() if k != "THESEUS_MANUAL"}
+        subprocess.run(["/bin/bash", str(self.ws / "engine/scheduled/run-job.sh"), "sync"], env=env, capture_output=True)
+        self.assertFalse(self.calls.exists())
+
+    def test_only_one_job_at_a_time(self):
+        holder = subprocess.Popen(["/bin/sleep", "30"])
+        self.addCleanup(holder.wait)
+        self.addCleanup(holder.kill)
+        (self.ws / "data/.job.lock").write_text(str(holder.pid))
+        p = self.theseus("sync")
+        self.assertEqual(p.returncode, 75)
+        self.assertIn("already running", p.stderr)
+        self.assertFalse(self.calls.exists())
+        self.assertEqual((self.ws / "data/.job.lock").read_text(), str(holder.pid))
+
+    def test_a_lock_left_by_a_dead_process_does_not_block(self):
+        gone = subprocess.Popen(["/usr/bin/true"])
+        gone.wait()
+        (self.ws / "data/.job.lock").write_text(str(gone.pid))
+        self.assertEqual(self.theseus("sync").returncode, 0)
+        self.assertTrue(self.calls.exists())
+        self.assertFalse((self.ws / "data/.job.lock").exists())
+
+    def test_a_question_runs_in_the_workspace_so_the_guard_applies(self):
+        p = self.theseus("what's", "next?")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("fake answer", p.stdout)
+        cwd, args = self.calls.read_text().split("|", 1)
+        self.assertEqual(Path(cwd).resolve(), self.ws.resolve())
+        self.assertIn("Never send anything", args)
+
+    def test_no_arguments_opens_a_chat_in_the_workspace(self):
+        self.assertEqual(self.theseus().returncode, 0)
+        cwd, args = self.calls.read_text().strip().split("|", 1)
+        self.assertEqual(Path(cwd).resolve(), self.ws.resolve())
+        self.assertEqual(args, "")
+
+    def test_a_typo_does_not_spend_your_plan(self):
+        self.assertEqual(self.theseus("stauts").returncode, 2)
+        self.assertFalse(self.calls.exists())
 
 
 class Versions(unittest.TestCase):

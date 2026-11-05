@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+- **A `theseus` command, alongside `ariadne`.** `theseus` opens a chat in Terminal, and `theseus "a question"` asks one thing. `theseus status`, `next` and `add` are instant and don't use Claude. `theseus sync` and `morning` run the real job and print the result. It all uses the same workspace, rules and send guard as the app. Installing or updating the engine links it at `~/.local/bin/theseus`.
+- **One run at a time.** The app, the schedule and the command now share a lock, so a sync you start by hand can't overlap one that's already running. A scheduled briefing waits its turn.
+- **Shannon is on the roadmap as an idea only.** Theseus and Ariadne stay separate apps. See `docs/ROADMAP.md`.
+
 ## 0.5.1
 - **Just open the app.** Once its permissions are in place, Theseus moves everything into the app by itself, with no click and without Claude or Terminal open. Until then its window opens and says what's missing. Handing back to Terminal stays handed back until you choose otherwise.
 - **ClickUp and Skylight sync on their own again.** Unattended runs can make the updates a sync needs: updating a ClickUp task, and adding, updating and completing Skylight chores, tasks and list items. Sending is still refused, and deleting still needs you.

@@ -133,7 +133,23 @@ Plugin install (inside Claude Code):
 /theseus:setup
 ```
 
+## From Terminal
+The `theseus` command works from anywhere, with the same workspace, rules and send guard as the app. The installer links it at `~/.local/bin/theseus`.
+
+| Command | What it does |
+|---|---|
+| `theseus` | chat with Theseus in Terminal |
+| `theseus "what's due this week?"` | ask one thing and print the answer |
+| `theseus status` | your list and what's running; instant, no Claude |
+| `theseus next [n]` | the top of your list; instant, no Claude |
+| `theseus add "call the bank" [--to now]` | put something on the list, in NEXT by default; instant, no Claude, and the next sync files it properly |
+| `theseus sync` · `theseus morning` | run that job now and print the result |
+
+Only one job runs at a time. If the app or the schedule is already running one, `theseus sync` says so and stops. Anything you start from Terminal uses Terminal's macOS permissions, so Terminal needs the same access the app has.
+
 ## Commands
+Inside a Claude Code session in your workspace:
+
 | Command | What it does |
 |---|---|
 | `/status` | full fresh re-run of everything, any time |

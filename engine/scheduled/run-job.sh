@@ -6,12 +6,33 @@ JOB="${1:-morning}"
 WS="${THESEUS_HOME:-$HOME/Theseus}"
 CLAUDE_BIN="__CLAUDE_BIN__"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$PATH"
+[[ -x "$CLAUDE_BIN" ]] || CLAUDE_BIN="$(command -v claude || true)"   # the theseus command runs this copy directly, without the installer's path
+[[ -n "$CLAUDE_BIN" ]] || { echo "Can't find Claude Code." >&2; exit 127; }
+MANUAL="${THESEUS_MANUAL:-}"   # set by the theseus command: you asked for this run, so it goes ahead whoever hosts the schedule
 cd "$WS" || exit 1
 # When Theseus.app hosts the schedule, it runs these jobs itself (with the app's permissions); the old launchd jobs stand down.
-if /usr/bin/python3 -c 'import json,sys; sys.exit(0 if json.load(open("config.json")).get("scheduler_host")=="app" else 1)' 2>/dev/null; then
+if [[ -z "$MANUAL" ]] && /usr/bin/python3 -c 'import json,sys; sys.exit(0 if json.load(open("config.json")).get("scheduler_host")=="app" else 1)' 2>/dev/null; then
   exit 0
 fi
-mkdir -p logs briefings
+mkdir -p logs briefings data
+LIMIT="$(/usr/bin/python3 -c 'import json; print(int(json.load(open("config.json")).get("job_time_limit_minutes", 45)) * 60)' 2>/dev/null || echo 2700)"
+# One run at a time, across the app, the schedule and the theseus command: two syncs at once could do everything twice. The app honors the same file.
+LOCK="data/.job.lock"
+create_lock() { (set -o noclobber; echo $$ > "$LOCK") 2>/dev/null; }
+lock_is_stale() {
+  local holder; holder="$(cat "$LOCK" 2>/dev/null)"
+  if [[ -z "$holder" ]]; then [[ -n "$(find "$LOCK" -mmin +1 2>/dev/null)" ]]; else ! kill -0 "$holder" 2>/dev/null; fi
+}
+take_lock() { create_lock && return 0; lock_is_stale || return 1; rm -f "$LOCK"; create_lock; }
+WAITED=0
+until take_lock; do
+  [[ "$JOB" == check ]] && exit 0   # the next check picks this up
+  if [[ -n "$MANUAL" ]]; then echo "Theseus is already running a job. Try again when it's done." >&2; exit 75; fi
+  # A scheduled briefing has only this one chance, so it waits its turn.
+  (( WAITED >= LIMIT )) && { echo "$(date '+%F %T') $JOB gave up waiting for another run" >> logs/checks.log; exit 1; }
+  sleep 30; WAITED=$((WAITED + 30))
+done
+trap 'rm -f "$LOCK"' EXIT
 STAMP="$(date +%Y-%m-%d_%H%M)"
 REASON=""
 if [[ "$JOB" == check ]]; then   # frequent check: a cheap local test first, and Claude runs only if something changed (or a full refresh is due)
@@ -33,7 +54,6 @@ print(p[kind] + (f" Reason for this run: {reason}." if reason else "") + " " + p
 PY
 )
 [[ -n "${PROMPT:-}" ]] || { echo "unknown job $JOB"; exit 2; }
-LIMIT="$(/usr/bin/python3 -c 'import json; print(int(json.load(open("config.json")).get("job_time_limit_minutes", 45)) * 60)' 2>/dev/null || echo 2700)"
 # One hung run must not hold up every later one. perl's alarm survives exec, and launchd won't start this job again while it's running.
 /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$LIMIT" "$CLAUDE_BIN" -p "$PROMPT" --output-format text > "logs/$JOB-$STAMP.out" 2> "logs/$JOB-$STAMP.err"
 code=$?
@@ -41,5 +61,9 @@ code=$?
 # The changes this run was for count as handled only now that it has finished. If it failed, they wait for the next one.
 if [[ $code -eq 0 && ( "$JOB" == check || "$JOB" == sync ) ]]; then
   /usr/bin/python3 engine/tools/changes.py --ack 2>>"logs/check-errors.log"
+fi
+if [[ -n "$MANUAL" ]]; then
+  cat "logs/$JOB-$STAMP.out"
+  [[ $code -eq 0 ]] || cat "logs/$JOB-$STAMP.err" >&2
 fi
 exit $code

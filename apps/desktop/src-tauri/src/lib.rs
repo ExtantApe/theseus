@@ -267,6 +267,48 @@ fn prompt_for(ws: &Path, kind: &str, reason: &str) -> String {
     format!("{base}{extra} {}", prompts["unattended"].as_str().unwrap_or("This is an unattended run: never wait for input."))
 }
 
+/// One run at a time across the app, the schedule and the theseus command. engine/scheduled/run-job.sh honors the same file.
+struct JobLock(PathBuf);
+
+impl JobLock {
+    fn take(ws: &Path) -> Option<JobLock> {
+        let path = ws.join("data/.job.lock");
+        for _ in 0..2 {
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut f) => {
+                    use std::io::Write;
+                    let _ = write!(f, "{}", std::process::id());
+                    return Some(JobLock(path));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if !job_lock_is_stale(&path) {
+                        return None;
+                    }
+                    let _ = fs::remove_file(&path);
+                }
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+}
+
+impl Drop for JobLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// Its holder has gone. An empty file is someone mid-way through taking it, unless it's been empty for a while.
+fn job_lock_is_stale(path: &Path) -> bool {
+    let holder = fs::read_to_string(path).unwrap_or_default();
+    let holder = holder.trim();
+    if holder.is_empty() {
+        return fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > Duration::from_secs(60));
+    }
+    !Command::new("/bin/kill").args(["-0", holder]).stderr(Stdio::null()).status().map(|c| c.success()).unwrap_or(false)
+}
+
 fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
     let claude = s.claude.clone().ok_or("Claude Code not found")?;
     {
@@ -277,6 +319,10 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
         }
         st.job_running = Some(kind.to_string());
     }
+    let Some(job_lock) = JobLock::take(&s.ws) else {
+        set(s, |st| st.job_running = None);
+        return Err("Theseus is already running a job from the command line. Try again when it's done.".into());
+    };
     let (d, m) = local_now();
     let stamp = format!("{}_{:02}{:02}", d, m / 60, m % 60);
     let out_path = s.ws.join(format!("logs/app-{kind}-{stamp}.out"));
@@ -292,6 +338,7 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
     let kind = kind.to_string();
     let reason = reason.to_string();
     thread::spawn(move || {
+        let _job_lock = job_lock; // released however this run ends
         if kind != "ask" {
             let _ = Command::new("/bin/bash").arg("engine/scheduled/before-run.sh").current_dir(&s2.ws).env("THESEUS_HOME", &s2.ws).env("PATH", path_env()).output();
         }
@@ -941,4 +988,31 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn job_lock_is_one_at_a_time_and_ignores_the_dead() {
+        let ws = std::env::temp_dir().join(format!("theseus-lock-{}", std::process::id()));
+        fs::create_dir_all(ws.join("data")).unwrap();
+        let lock = ws.join("data/.job.lock");
+
+        let first = JobLock::take(&ws).expect("free");
+        assert!(JobLock::take(&ws).is_none(), "held by a live process");
+        drop(first);
+        assert!(!lock.exists(), "released");
+
+        let mut gone = Command::new("/usr/bin/true").spawn().unwrap();
+        let pid = gone.id();
+        gone.wait().unwrap();
+        fs::write(&lock, pid.to_string()).unwrap();
+        assert!(JobLock::take(&ws).is_some(), "its holder has gone");
+
+        fs::write(&lock, "").unwrap();
+        assert!(JobLock::take(&ws).is_none(), "someone is mid-way through taking it");
+        let _ = fs::remove_dir_all(&ws);
+    }
 }
