@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="t">
   <title id="t">Theseus</title>
-  <!-- A Greek key unwinding into one straight line: the way through, cleared. Tile per brand/README.md: 896 square, radius 200, top-to-bottom pastel gradient, deep brown line glyph. -->
-  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d5e4f0"/><stop offset="1" stop-color="#a9c6de"/></linearGradient></defs>
+  <!-- A compass: finding your way through what the day brings. Tile per brand/README.md: 896 square, radius 200, top-to-bottom pastel gradient, deep brown line glyph. -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe9e6"/><stop offset="1" stop-color="#97cfc9"/></linearGradient></defs>
   <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#g)"/>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#4c312c"><g transform="translate(-33 32)" stroke-width="44"><path d="M490 520V440H590V620H390V340H690V720H250V240H840"/></g></g>
+  <path d="M772 512A260 260 0 1 1 252 512A260 260 0 1 1 772 512ZM512 336L580 512L512 688L444 512Z" fill="none" stroke="#4c312c" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

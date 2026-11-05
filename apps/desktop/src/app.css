@@ -1,6 +1,6 @@
-/* Theseus: Aegean blue. Everything else comes from ui/family.css. */
-:root { --accent: #17395a; --accent-soft: #17395a1a; }
-@media (prefers-color-scheme: dark) { :root { --accent: #6fa8d6; --accent-soft: #6fa8d622; } .btn.primary { background: #2f6690; border-color: #2f6690; } }
+/* Theseus: seafoam, with a deep teal accent. Everything else comes from ui/family.css. */
+:root { --accent: #17565a; --accent-soft: #17565a1a; }
+@media (prefers-color-scheme: dark) { :root { --accent: #6fc4bd; --accent-soft: #6fc4bd22; } .btn.primary { background: #2a7a76; border-color: #2a7a76; } }
 
 .ask { display: flex; gap: 8px; }
 .ask input { height: 36px; }
@@ -34,7 +34,7 @@
 .check { flex: none; width: 16px; height: 16px; margin-top: 1px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1.5px solid color-mix(in srgb, var(--muted) 60%, transparent); background: var(--field); color: #fbf8f2; cursor: pointer; }
 .check:hover { border-color: var(--accent); }
 .check.on { background: var(--accent); border-color: var(--accent); }
-@media (prefers-color-scheme: dark) { .check.on { background: #2f6690; border-color: #2f6690; } }
+@media (prefers-color-scheme: dark) { .check.on { background: #2a7a76; border-color: #2a7a76; } }
 .task-body { flex: 1; min-width: 0; }
 .task-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .task-line input { height: 24px; }

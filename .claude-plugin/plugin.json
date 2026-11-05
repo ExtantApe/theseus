@@ -1,6 +1,6 @@
 {
   "name": "theseus",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "A private, never-sends personal assistant for Claude Code on macOS: one prioritized list, morning and evening briefings, texts you owe replies, drafts in your voice. Independent project, not affiliated with Anthropic.",
   "author": { "name": "Theseus contributors" },
   "license": "MIT",

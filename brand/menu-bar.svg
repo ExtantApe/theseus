@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <!-- Menu bar: the glyph alone in black. macOS treats it as a template image and colors it for light and dark. -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="#000"><g transform="translate(-38 32)" stroke-width="96"><path d="M430 520V410H590V640H270V270H830"/></g></g>
+  <path d="M772 512A260 260 0 1 1 252 512A260 260 0 1 1 772 512ZM512 318L602 512L512 706L422 512Z" fill="none" stroke="#000" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.3
+- **A new icon and color.** Theseus is now a compass on seafoam, with a deep teal accent inside the app. Ariadne gets a matching change.
+
 ## 0.5.2
 - **A `theseus` command, alongside `ariadne`.** `theseus` opens a chat in Terminal, and `theseus "a question"` asks one thing. `theseus status`, `next` and `add` are instant and don't use Claude. `theseus sync` and `morning` run the real job and print the result. It all uses the same workspace, rules and send guard as the app. Installing or updating the engine links it at `~/.local/bin/theseus`.
 - **One run at a time.** The app, the schedule and the command now share a lock, so a sync you start by hand can't overlap one that's already running. A scheduled briefing waits its turn.
