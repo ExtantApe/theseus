@@ -25,6 +25,7 @@ You don't configure Theseus so much as introduce yourself to it.
   you actually use, and how you like to be talked to. Everything goes into a plain-text **profile** you can edit anytime.
 - **Give it context and it goes looking.** "I run two small businesses and a podcast" becomes categories. "My old lists are in Notes" becomes a migration.
 - **It learns your writing voice** from your own sent texts (length, capitalization, emoji, how you say yes, no and later) and drafts replies that sound like you.
+- **It can keep notes on a conversation, when you ask.** Deep, neutral notes on how you and one person talk catch the small patterns and get it back up to speed without rereading the whole thread. Want an outside opinion on how you come across? Ask for `/thread-insights`.
 - **It learns how you prioritize**, from quick A-or-B questions and from what you actually do first, and turns your reasons into rules.
 - **It learns your rhythm.** If you're usually up later on weekends, it notices and suggests moving your briefings.
 
@@ -160,6 +161,8 @@ Inside a Claude Code session in your workspace:
 | `/texts` | who's waiting on a reply; "sprint" to clear the easy ones |
 | `/reply <name>` | as-if-they-asked questions, then a draft in your voice (never sent) |
 | `/review` | weekly cleanup: archive, stale items, priority rules, rhythm |
+| `/thread-notes <name>` | deep, neutral notes on how you and this one person talk, only when you ask; reads only messages the notes haven't covered and logs every check |
+| `/thread-insights <name>` | an unbiased outside read on how you communicate in this conversation, with dated examples, only when you ask |
 | `/thread-report <name>` | neutral, timestamped account of a long thread |
 | `/text-research <topic>` | search and compile across your texts |
 | `/sync-check [n]` | is all your message history on this Mac? |

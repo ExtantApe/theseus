@@ -433,6 +433,115 @@ class Command(unittest.TestCase):
         self.assertFalse(self.calls.exists())
 
 
+class ThreadNotes(unittest.TestCase):
+    """Runs the real commands against fake messages, because tests can't read a real Messages database."""
+    RUN = """import sys, json, datetime as dt
+sys.path.insert(0, %r)
+import imsg
+def msg(guid, text, edited=False):
+    return dict(guid=guid, text=text, attachments=[], from_me=False, when=dt.datetime(2026, 1, 1, 12, 0), reaction=None, reaction_target=None,
+                item_type=0, audio=False, edited=edited, unsent=False, reply_to=None, service="iMessage", sender="Sam")
+class Fake:
+    def __init__(self, fresh=False): pass
+    def pick(self, who): return dict(key=%r, label=%r, handles=["+15555550100"], is_group=False, chat_ids=[1])
+    def messages(self, *a, **k): return [msg(*m) for m in json.load(open("msgs.json"))]
+imsg.Messages = Fake
+sys.argv = ["imsg.py"] + sys.argv[1:]
+imsg.main()
+"""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-ws-"))
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        self.env = {**os.environ, "THESEUS_HOME": str(self.ws), "HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        self.dir = self.ws / "data/thread-notes"
+
+    def run_tool(self, msgs, *args, key="person:sam", label="Sam"):
+        (self.ws / "msgs.json").write_text(json.dumps(msgs))
+        code = self.RUN % (str(TOOLS), key, label)
+        return subprocess.run(["/usr/bin/python3", "-c", code, *args], capture_output=True, text=True, env=self.env, cwd=self.ws)
+
+    def ledger(self):
+        return json.loads(next(self.dir.glob("*.json")).read_text())
+
+    def checks(self):
+        return [json.loads(l) for l in (self.dir / "checks.jsonl").read_text().splitlines()]
+
+    def write_notes(self, text):
+        next(self.dir.glob("*.json")).with_suffix(".md").write_text(text)
+
+    def test_updated_and_checked_are_separate_marks(self):
+        msgs = [["g1", "hello"], ["g2", "hi there"]]
+        self.assertIn("hi there", self.run_tool(msgs, "thread-notes", "Sam").stdout)
+        self.assertIsNone(self.ledger()["last_checked"])  # reading alone records nothing yet
+
+        self.write_notes("# Sam\n- short replies\n")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        updated = self.ledger()["last_updated"]
+        self.assertTrue(updated)
+        self.assertIn("_Last updated", next(self.dir.glob("*.md")).read_text())
+
+        p = self.run_tool(msgs, "thread-notes", "Sam")  # nothing new: logged, with nothing to mark
+        self.assertIn("New messages: 0", p.stdout)
+        self.assertNotIn("hi there", p.stdout)
+
+        msgs.append(["g3", "new one"])
+        p = self.run_tool(msgs, "thread-notes", "Sam")
+        self.assertIn("new one", p.stdout)
+        self.assertNotIn("hi there", p.stdout)
+        self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+
+        self.assertEqual(self.ledger()["last_updated"], updated)
+        self.assertEqual([c["result"] for c in self.checks()], ["updated", "no-new-messages", "unchanged"])
+        self.assertEqual([c["messages"] for c in self.checks()], [2, 0, 1])
+
+    def test_a_mark_has_to_match_the_file(self):
+        msgs = [["g1", "hello"]]
+        self.run_tool(msgs, "thread-notes", "Sam")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated")
+        self.assertNotEqual(p.returncode, 0)
+        self.write_notes("# Sam\n- something\n")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(self.ledger()["seen"], [])  # a refused mark sees nothing
+        self.assertEqual(self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated").returncode, 0)
+        self.assertNotEqual(self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated").returncode, 0)  # nothing pending now
+
+    def test_only_what_was_shown_counts_as_seen(self):
+        msgs = [["g1", "one"], ["g2", "two"], ["g3", "three"]]
+        p = self.run_tool(msgs, "thread-notes", "Sam", "--limit", "2")
+        self.assertIn("1 left", p.stdout)
+        self.assertNotIn("three", p.stdout)
+        msgs.append(["g4", "arrived while reading"])
+        self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+        p = self.run_tool(msgs, "thread-notes", "Sam")
+        self.assertIn("three", p.stdout)
+        self.assertIn("arrived while reading", p.stdout)
+        self.assertNotIn("one", p.stdout.split("Messages not covered yet")[1])
+
+    def test_an_edited_message_counts_as_unseen(self):
+        self.run_tool([["g1", "orginal"]], "thread-notes", "Sam")
+        self.run_tool([["g1", "orginal"]], "thread-notes-mark", "Sam", "--result", "unchanged")
+        self.assertIn("original", self.run_tool([["g1", "original", True]], "thread-notes", "Sam").stdout)
+
+    def test_a_renamed_contact_keeps_their_notes(self):
+        self.run_tool([["g1", "hello"]], "thread-notes", "Sam")
+        self.run_tool([["g1", "hello"]], "thread-notes-mark", "Sam", "--result", "unchanged")
+        p = self.run_tool([["g1", "hello"]], "thread-notes", "Samantha", key="person:samantha", label="Samantha")
+        self.assertIn("New messages: 0", p.stdout)
+        self.assertEqual(len(list(self.dir.glob("*.json"))), 1)
+        self.assertEqual(self.ledger()["label"], "Samantha")
+        self.assertIn("Samantha", self.run_tool([], "thread-notes-list").stdout)
+
+
+class OnlyWhenAsked(unittest.TestCase):
+    def test_no_scheduled_run_takes_thread_notes_or_insights(self):
+        text = (ROOT / "engine/scheduled/prompts.json").read_text()
+        self.assertNotIn("thread-notes", text)
+        self.assertNotIn("thread-insights", text)
+
+
 class Versions(unittest.TestCase):
     def test_everything_says_the_same_version(self):
         v = (ROOT / "engine/VERSION").read_text().strip()

@@ -459,6 +459,7 @@ Compare two items and keep the more important one on top (bubble-sort style), bu
   `[YYYY-MM-DD HH:MM, Sender]`. Keep what was said separate from interpretation, which goes in its own labeled section
   or is omitted if they asked for neutral only. Quote exactly. Note edits, unsent messages and gaps. Don't infer motives.
 - Long threads: monthly summaries into `exports/<slug>/summaries/`, then synthesize. Never skip a period silently.
+- `/thread-notes` and `/thread-insights` run only when the user asks for them, never from a scheduled run or a sync.
 
 ---------------------------------------------------------------------------
 ## 10. Email, Slack bridge, ClickUp

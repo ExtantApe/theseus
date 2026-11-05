@@ -123,6 +123,8 @@ bash ~/Theseus/engine/install.sh --schedule
 | `/reply Sam` | Sam's open questions, asked as if Sam asked you; then a draft in your words. **Never sent.** |
 | `/rank`, `/rank now` | quick "A or B?" prioritizing |
 | `/review` | weekly cleanup and learning |
+| `/thread-notes Sam` | deep, neutral notes on how you and Sam talk, only when you ask; reads only messages the notes haven't covered and logs every check |
+| `/thread-insights Sam` | an unbiased outside read on how you communicate with Sam, with dated examples, only when you ask |
 | `/thread-report Sam since 2021` | neutral, timestamped account of a long thread |
 | `/text-research every mention of the lake house` | search and compile across your texts |
 | `/sync-check 48210` | is all your message history on this Mac? |
