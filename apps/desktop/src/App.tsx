@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { inlineParts } from './inline'
 import { Block, ListTools, useListActions, type ListActions } from './ListUI'
 import { commsSection, dropEmoji, nowSection } from './master'
 import { Icon, type IconName } from './ui/Icon'
@@ -57,12 +58,11 @@ function parseToday(md: string) {
 
 /** **bold**, `code` and _italic_, safely, as React nodes. */
 function inline(text: string): ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_)/g)
-  return parts.map((p, i) => {
-    if (p.startsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>
-    if (p.startsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>
-    if (p.length > 2 && p.startsWith('_') && p.endsWith('_')) return <i key={i}>{p.slice(1, -1)}</i>
-    return p
+  return inlineParts(text).map((p, i) => {
+    if (p.kind === 'bold') return <b key={i}>{p.text}</b>
+    if (p.kind === 'code') return <code key={i}>{p.text}</code>
+    if (p.kind === 'italic') return <i key={i}>{p.text}</i>
+    return p.text
   })
 }
 

@@ -270,6 +270,27 @@ class Workspace(unittest.TestCase):
         self.assertNotIn("was:", p.stdout)
         self.assertNotIn("id:", p.stdout)
 
+    def test_search_marks_every_hit_and_separates_only_apart_windows(self):
+        code = """import sys, types, argparse, datetime as dt
+sys.path.insert(0, %r)
+import imsg
+def msg(n, text):
+    return dict(guid=str(n), text=text, attachments=[], from_me=False, when=dt.datetime(2026, 1, 1, 12, n), reaction=None, reaction_target=None,
+                item_type=0, audio=False, edited=False, unsent=False, reply_to=None, service="iMessage", sender="Sam")
+texts = ["a", "hit", "hit", "b", "c", "d", "e", "hit", "f"]
+class Fake:
+    def __init__(self, fresh=False): pass
+    def pick(self, who): return dict(label="Sam", chat_ids=[1], last_dt=None, automated=False)
+    def messages(self, *a, **k): return [msg(n, t) for n, t in enumerate(texts)]
+imsg.Messages = Fake
+imsg.cmd_search(argparse.Namespace(fresh=False, since=None, until=None, query="hit", regex=False, who="Sam", all=False, from_me=False, from_them=False, limit=10, context=1))
+""" % str(TOOLS)
+        p = subprocess.run(["/usr/bin/python3", "-c", code], capture_output=True, text=True, env=self.env, cwd=self.ws)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        lines = p.stdout.splitlines()
+        self.assertEqual(sum(l.startswith("» ") for l in lines), 3, p.stdout)
+        self.assertEqual(lines.count("---"), 2, p.stdout)  # one for the overlapping pair, one for the later hit
+
 
 class Install(unittest.TestCase):
     def setUp(self):

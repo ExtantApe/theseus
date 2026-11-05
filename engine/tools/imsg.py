@@ -778,18 +778,21 @@ def cmd_search(a):
             continue
         print(f"\n## {g['label']} — {len(hits)} match{'es' if len(hits) != 1 else ''}")
         shown = set()
+        hit_set = set(hits)
+        prev_hi = 0
         for i in hits:
             if total >= a.limit:
                 print(f"\n…stopped at --limit {a.limit}. Narrow with --who/--since or raise --limit.")
                 return
             lo, hi = max(0, i - a.context), min(len(msgs), i + a.context + 1)
-            if a.context:
+            if a.context and (not shown or lo >= prev_hi):
                 print("---")
+            prev_hi = hi
             for j in range(lo, hi):
                 if j in shown:
                     continue
                 shown.add(j)
-                print(("» " if j == i else "  ") + render_line(msgs[j], by_guid, show_date=True))
+                print(("» " if j in hit_set else "  ") + render_line(msgs[j], by_guid, show_date=True))
             total += 1
     if total == 0:
         print("No matches.")
