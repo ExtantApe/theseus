@@ -12,7 +12,7 @@ Follow engine/RULES.md §11 "Compliance check". Steps:
 4. For each ❌, propose the smallest concrete change (which engine file and what to change, or a setting such as turning off
    hourly sync). **Do not edit the engine or docs yourself.** Write the proposal to data/compliance/proposals.md and ask the user.
    If the user maintains the public repo, also draft a CHANGELOG line and a note for users.
-5. Put one line in the Today note: "⚖️ Compliance (monthly): all clear", or "⚖️ Compliance: N items need a look (see /compliance-check)".
+5. Put one line in the Today note: "⚖️ Compliance (monthly): all clear", or "⚖️ Compliance: N items need a look (see /compliance)".
 6. Update `data/state.json → compliance_last_checked`. Log it in data/log.md.
 Never present this as legal advice. When something is genuinely ambiguous, say so and suggest asking Anthropic directly.
 Extra: $ARGUMENTS

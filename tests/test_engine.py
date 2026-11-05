@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -372,6 +373,16 @@ class Command(unittest.TestCase):
     def master(self):
         return (self.ws / "data/master.md").read_text()
 
+    def test_a_named_workspace_that_is_not_there_never_falls_back_to_the_real_list(self):
+        empty = self.ws / "not-a-workspace"
+        empty.mkdir()
+        self.env["THESEUS_HOME"] = str(empty)
+        for args in (["add", "should not land"], ["done", "First"], ["next"]):
+            p = self.theseus(*args)
+            self.assertEqual(p.returncode, 1, p.stdout)
+            self.assertIn("no Theseus workspace there", p.stderr)
+        self.assertEqual(self.master(), self.MASTER)
+
     def test_status_counts_what_is_left_without_claude(self):
         p = self.theseus("status")
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -392,6 +403,43 @@ class Command(unittest.TestCase):
         event = json.loads((self.ws / "data/app-edits.jsonl").read_text())
         self.assertEqual((event["action"], event["title"], event["to"]), ("add", "call - the bank", "next"))
         self.assertEqual(self.MASTER, next((self.ws / "data/archive").glob("master-app-*.md")).read_text())
+        self.assertFalse(self.calls.exists())
+
+    def test_done_moves_the_item_and_its_notes_and_reaches_the_next_sync(self):
+        p = self.theseus("done", "first")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        stamp = f"{dt.date.today().month}/{dt.date.today().day}"
+        self.assertNotIn("- [ ] First", self.master())
+        self.assertIn(f"## ✅ DONE\n- [x] First · #Work · due Thu 11/5 · done {stamp} · was:now · id:t1\n  - a note\n- [x] Finished", self.master())
+        event = json.loads((self.ws / "data/app-edits.jsonl").read_text())
+        self.assertEqual((event["action"], event["id"], event["title"], event["repeating"]), ("complete", "t1", "First", False))
+        self.assertFalse(self.calls.exists())
+
+    def test_done_on_a_repeating_item_is_done_for_now(self):
+        (self.ws / "data/master.md").write_text(self.master().replace("- [ ] Second · #Home", "- [ ] Water plants · ↻ weekly · id:t9\n- [ ] Second · #Home"))
+        self.assertEqual(self.theseus("done", "water").returncode, 0)
+        stamp = f"{dt.date.today().month}/{dt.date.today().day}"
+        self.assertIn(f"- [ ] Water plants · ↻ weekly · done for now {stamp} · id:t9", self.master())
+        self.assertTrue(json.loads((self.ws / "data/app-edits.jsonl").read_text())["repeating"])
+        self.assertEqual(self.theseus("done", "water").returncode, 1)  # it's no longer open
+
+    def test_done_changes_nothing_when_unclear_or_unknown(self):
+        before = self.master()
+        self.assertEqual(self.theseus("done", "e").returncode, 3)    # several titles match
+        self.assertEqual(self.theseus("done", "nothing like it").returncode, 1)
+        self.assertEqual(self.theseus("done", "finished").returncode, 1)    # already done
+        self.assertEqual(self.theseus("done").returncode, 2)
+        self.assertEqual(self.master(), before)
+
+    def test_done_by_id(self):
+        self.assertEqual(self.theseus("done", "t4").returncode, 0)
+        self.assertIn("- [x] Later on", self.master())
+
+    def test_today_and_texts_never_reach_claude(self):
+        self.assertEqual(self.theseus("today").returncode, 1)
+        (self.ws / "data/today.md").write_text("# Today\nhello\n")
+        self.assertEqual(self.theseus("today").stdout, "# Today\nhello\n")
+        self.theseus("texts")
         self.assertFalse(self.calls.exists())
 
     def test_add_to_a_section_you_name(self):
@@ -452,6 +500,130 @@ class Command(unittest.TestCase):
     def test_a_typo_does_not_spend_your_plan(self):
         self.assertEqual(self.theseus("stauts").returncode, 2)
         self.assertFalse(self.calls.exists())
+
+
+class ThreadNotes(unittest.TestCase):
+    """Runs the real commands against fake messages, because tests can't read a real Messages database."""
+    RUN = """import sys, json, datetime as dt
+sys.path.insert(0, %r)
+import imsg
+def msg(guid, text, edited=False):
+    return dict(guid=guid, text=text, attachments=[], from_me=False, when=dt.datetime(2026, 1, 1, 12, 0), reaction=None, reaction_target=None,
+                item_type=0, audio=False, edited=edited, unsent=False, reply_to=None, service="iMessage", sender="Sam")
+class Fake:
+    def __init__(self, fresh=False): pass
+    def pick(self, who): return dict(key=%r, label=%r, handles=["+15555550100"], is_group=False, chat_ids=[1])
+    def messages(self, *a, **k): return [msg(*m) for m in json.load(open("msgs.json"))]
+imsg.Messages = Fake
+sys.argv = ["imsg.py"] + sys.argv[1:]
+imsg.main()
+"""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-ws-"))
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        self.env = {**os.environ, "THESEUS_HOME": str(self.ws), "HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        self.dir = self.ws / "data/thread-notes"
+
+    def run_tool(self, msgs, *args, key="person:sam", label="Sam"):
+        (self.ws / "msgs.json").write_text(json.dumps(msgs))
+        code = self.RUN % (str(TOOLS), key, label)
+        return subprocess.run(["/usr/bin/python3", "-c", code, *args], capture_output=True, text=True, env=self.env, cwd=self.ws)
+
+    def ledger(self):
+        return json.loads(next(self.dir.glob("*.json")).read_text())
+
+    def checks(self):
+        return [json.loads(l) for l in (self.dir / "checks.jsonl").read_text().splitlines()]
+
+    def write_notes(self, text):
+        next(self.dir.glob("*.json")).with_suffix(".md").write_text(text)
+
+    def test_updated_and_checked_are_separate_marks(self):
+        msgs = [["g1", "hello"], ["g2", "hi there"]]
+        self.assertIn("hi there", self.run_tool(msgs, "thread-notes", "Sam").stdout)
+        self.assertIsNone(self.ledger()["last_checked"])  # reading alone records nothing yet
+
+        self.write_notes("# Sam\n- short replies\n")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        updated = self.ledger()["last_updated"]
+        self.assertTrue(updated)
+        self.assertIn("_Last updated", next(self.dir.glob("*.md")).read_text())
+
+        p = self.run_tool(msgs, "thread-notes", "Sam")  # nothing new: logged, with nothing to mark
+        self.assertIn("New messages: 0", p.stdout)
+        self.assertNotIn("hi there", p.stdout)
+
+        msgs.append(["g3", "new one"])
+        p = self.run_tool(msgs, "thread-notes", "Sam")
+        self.assertIn("new one", p.stdout)
+        self.assertNotIn("hi there", p.stdout)
+        self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+
+        self.assertEqual(self.ledger()["last_updated"], updated)
+        self.assertEqual([c["result"] for c in self.checks()], ["updated", "no-new-messages", "unchanged"])
+        self.assertEqual([c["messages"] for c in self.checks()], [2, 0, 1])
+
+    def test_a_mark_has_to_match_the_file(self):
+        msgs = [["g1", "hello"]]
+        self.run_tool(msgs, "thread-notes", "Sam")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated")
+        self.assertNotEqual(p.returncode, 0)
+        self.write_notes("# Sam\n- something\n")
+        p = self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(self.ledger()["seen"], [])  # a refused mark sees nothing
+        self.assertEqual(self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated").returncode, 0)
+        self.assertNotEqual(self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "updated").returncode, 0)  # nothing pending now
+
+    def test_only_what_was_shown_counts_as_seen(self):
+        msgs = [["g1", "one"], ["g2", "two"], ["g3", "three"]]
+        p = self.run_tool(msgs, "thread-notes", "Sam", "--limit", "2")
+        self.assertIn("1 left", p.stdout)
+        self.assertNotIn("three", p.stdout)
+        msgs.append(["g4", "arrived while reading"])
+        self.run_tool(msgs, "thread-notes-mark", "Sam", "--result", "unchanged")
+        p = self.run_tool(msgs, "thread-notes", "Sam")
+        self.assertIn("three", p.stdout)
+        self.assertIn("arrived while reading", p.stdout)
+        self.assertNotIn("one", p.stdout.split("Messages not covered yet")[1])
+
+    def test_an_edited_message_counts_as_unseen(self):
+        self.run_tool([["g1", "orginal"]], "thread-notes", "Sam")
+        self.run_tool([["g1", "orginal"]], "thread-notes-mark", "Sam", "--result", "unchanged")
+        self.assertIn("original", self.run_tool([["g1", "original", True]], "thread-notes", "Sam").stdout)
+
+    def test_a_renamed_contact_keeps_their_notes(self):
+        self.run_tool([["g1", "hello"]], "thread-notes", "Sam")
+        self.run_tool([["g1", "hello"]], "thread-notes-mark", "Sam", "--result", "unchanged")
+        p = self.run_tool([["g1", "hello"]], "thread-notes", "Samantha", key="person:samantha", label="Samantha")
+        self.assertIn("New messages: 0", p.stdout)
+        self.assertEqual(len(list(self.dir.glob("*.json"))), 1)
+        self.assertEqual(self.ledger()["label"], "Samantha")
+        self.assertIn("Samantha", self.run_tool([], "thread-notes-list").stdout)
+
+
+class CommandList(unittest.TestCase):
+    def test_every_command_is_listed_and_every_listed_command_exists(self):
+        text = (ROOT / "engine/commands.txt").read_text()
+        listed = set(re.findall(r"^  /([a-z-]+)(?=\s)", text, re.M))
+        self.assertEqual(listed, {p.stem for p in (ROOT / "engine/workflows").glob("*.md")})
+
+    def test_scheduled_prompts_point_at_real_workflows(self):
+        for name in re.findall(r"engine/workflows/([a-z-]+)\.md", (ROOT / "engine/scheduled/prompts.json").read_text()):
+            self.assertTrue((ROOT / f"engine/workflows/{name}.md").exists(), name)
+
+    def test_no_command_shares_a_name_with_a_claude_code_one(self):
+        builtin = {"status", "review", "voice", "insights", "undo", "doctor", "update", "help", "stats", "memory", "usage"}
+        self.assertEqual({p.stem for p in (ROOT / "engine/workflows").glob("*.md")} & builtin, set())
+
+
+class OnlyWhenAsked(unittest.TestCase):
+    def test_no_scheduled_run_takes_thread_notes_or_insights(self):
+        text = (ROOT / "engine/scheduled/prompts.json").read_text()
+        self.assertNotIn("learn", text)
+        self.assertNotIn("mirror", text)
 
 
 class Versions(unittest.TestCase):

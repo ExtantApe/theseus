@@ -3,6 +3,7 @@
 imsg.py — READ-ONLY toolkit for macOS Messages (iMessage + SMS/RCS).
 
 It never writes to your real Messages database and has no ability to send.
+The only thing it saves is in your workspace: exports, and the thread notes below.
 It works from a snapshot copy of ~/Library/Messages/chat.db (taken with
 SQLite's backup API, so the WAL file is included) and matches phone
 numbers / emails to names from your Contacts database.
@@ -18,6 +19,9 @@ Subcommands
   stats         volume, response times, silences for one conversation
   style         sample of YOUR sent messages + habits (to learn your voice)
   who           resolve a name/number to conversations
+  thread-notes       neutral notes on one conversation, plus the messages they haven't covered
+  thread-notes-mark  record that check: the notes were updated, or didn't need to be
+  thread-notes-list  all thread notes, with when each was last updated and last checked
 
 Run `python3 imsg.py <cmd> -h` for options. Python 3.9+ stdlib only.
 """
@@ -26,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import hashlib
 import json
 import os
 import platform
@@ -41,6 +46,7 @@ HOME = Path.home()
 WS = Path(os.environ.get("THESEUS_HOME") or Path(__file__).resolve().parents[2])   # ~/Theseus (workspace)
 CACHE = WS / "cache"
 EXPORTS = WS / "exports"
+THREAD_NOTES = WS / "data" / "thread-notes"
 CONFIG_PATH = WS / "config.json"
 CHAT_DB = Path(os.environ.get("IMSG_CHAT_DB", HOME / "Library/Messages/chat.db"))
 AB_DIR = Path(os.environ.get("IMSG_AB_DIR", HOME / "Library/Application Support/AddressBook"))
@@ -885,6 +891,129 @@ def cmd_who(a):
         print(f"{'👥' if g['is_group'] else '👤'} {g['label']} · {g['count']:,} msgs · last {last} · "
               f"handles {', '.join(g['handles'])} · chat ids {','.join(map(str, g['chat_ids']))}")
 
+# ------------------------------------------------------------- thread notes
+# Neutral notes on how the user and one person talk, taken only when the user asks. data/thread-notes/<id>.md holds them, and
+# <id>.json records which messages they've covered. checks.jsonl logs every check, including the ones that changed nothing. "Updated" and "checked" are separate marks on purpose.
+
+STAMP_RE = re.compile(r"^_Last updated .*_\n?", re.M)
+
+
+def now_stamp() -> str:
+    return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def fingerprint(m: dict) -> str:
+    """Changes if a message is edited or unsent, so that counts as unseen too. Late-synced old messages are caught as well."""
+    raw = "\0".join([m["guid"], m["text"] or "", str(m["edited"]), str(m["unsent"])])
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def write_atomic(path: Path, text: str):
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+def notes_body_hash(path: Path) -> str | None:
+    """The notes without the stamp line, so stamping a check never looks like an update."""
+    if not path.exists():
+        return None
+    return hashlib.sha256(STAMP_RE.sub("", path.read_text(), count=1).encode()).hexdigest()
+
+
+def notes_ledger(g: dict) -> tuple[Path, dict]:
+    """Finds this conversation's record, by key or, for a person whose contact name changed, by phone or email."""
+    THREAD_NOTES.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for path in sorted(THREAD_NOTES.glob("*.json")):
+        led = json.loads(path.read_text())
+        if led["key"] == g["key"] or (not g["is_group"] and not led["is_group"] and set(led["handles"]) & set(g["handles"])):
+            led.update(label=g["label"], key=g["key"], handles=sorted(g["handles"]))
+            return path, led
+    pid = hashlib.sha256(g["key"].encode()).hexdigest()[:12]
+    return THREAD_NOTES / f"{pid}.json", {"label": g["label"], "key": g["key"], "handles": sorted(g["handles"]), "is_group": g["is_group"],
+                                     "last_updated": None, "last_checked": None, "seen": [], "pending": None}
+
+
+def stamp_notes(path: Path, led: dict):
+    if not path.exists():
+        return
+    line = f"_Last updated {led['last_updated'] or 'never'} · last checked {led['last_checked']}_\n"
+    text = path.read_text()
+    if STAMP_RE.search(text):
+        text = STAMP_RE.sub(lambda _: line, text, count=1)
+    else:
+        head, sep, rest = text.partition("\n")
+        text = f"{head}\n{line}{rest}" if sep else f"{head}\n{line}"
+    write_atomic(path, text)
+
+
+def log_check(led_path: Path, led: dict, result: str, messages: int, remaining: int):
+    led["last_checked"] = now_stamp()
+    if result == "updated":
+        led["last_updated"] = led["last_checked"]
+    write_atomic(led_path, json.dumps(led))
+    stamp_notes(led_path.with_suffix(".md"), led)
+    with (THREAD_NOTES / "checks.jsonl").open("a") as f:
+        f.write(json.dumps({"at": led["last_checked"], "thread": led_path.stem, "label": led["label"], "result": result,
+                            "messages": messages, "remaining": remaining}) + "\n")
+
+
+def cmd_notes(a):
+    db = Messages(fresh=a.fresh)
+    g = db.pick(a.who)
+    msgs = [m for m in db.messages(g["chat_ids"], parse_date(a.since), include_reactions=False) if is_real(m)]
+    by_guid = {m["guid"]: m for m in msgs}
+    led_path, led = notes_ledger(g)
+    md = led_path.with_suffix(".md")
+    seen = set(led["seen"])
+    unseen = [m for m in msgs if fingerprint(m) not in seen]
+    print(f"# Thread notes: {g['label']}\n\nFile: {md}\nLast updated: {led['last_updated'] or 'never'}\nLast checked: {led['last_checked'] or 'never'}")
+    if not unseen:
+        led["pending"] = None
+        log_check(led_path, led, "no-new-messages", 0, 0)
+        print("New messages: 0. Nothing to read; this check is logged.")
+    batch = unseen[:a.limit]
+    if batch:
+        print(f"New messages: {len(unseen):,}, showing the oldest {len(batch):,}, {len(unseen) - len(batch):,} left after this.")
+    print("\n## Current notes\n\n" + (md.read_text().strip() if md.exists() else "(not written yet)"))
+    if not batch:
+        return
+    led["pending"] = {"seen": [fingerprint(m) for m in batch], "notes_hash": notes_body_hash(md), "remaining": len(unseen) - len(batch)}
+    write_atomic(led_path, json.dumps(led))
+    print("\n## Messages not covered yet\n")
+    for m in batch:
+        print(render_line(m, by_guid, show_date=True))
+    print(f'\nThen record it: imsg.py thread-notes-mark "{g["label"]}" --result updated (or unchanged)')
+
+
+def cmd_notes_mark(a):
+    db = Messages(fresh=a.fresh)
+    g = db.pick(a.who)
+    led_path, led = notes_ledger(g)
+    pending = led.get("pending")
+    if not pending:
+        sys.exit(f"Nothing to mark for {g['label']}: run `imsg.py thread-notes` first.")
+    changed = notes_body_hash(led_path.with_suffix(".md")) != pending["notes_hash"]
+    if a.result == "updated" and not changed:
+        sys.exit("--result updated, but the notes file didn't change. Save it first, or use --result unchanged.")
+    if a.result == "unchanged" and changed:
+        sys.exit("--result unchanged, but the notes file changed. Use --result updated.")
+    # Only what `thread-notes` actually showed counts as seen, so a message that arrives in between is still new next time.
+    led["seen"] = sorted(set(led["seen"]) | set(pending["seen"]))
+    led["pending"] = None
+    log_check(led_path, led, a.result, len(pending["seen"]), pending["remaining"])
+    print(f"{g['label']}: {a.result}. Last updated {led['last_updated'] or 'never'}, last checked {led['last_checked']}. "
+          f"{pending['remaining']:,} messages left.")
+
+
+def cmd_notes_list(a):
+    rows = [json.loads(p.read_text()) | {"path": p} for p in sorted(THREAD_NOTES.glob("*.json"))] if THREAD_NOTES.exists() else []
+    if not rows:
+        print("No thread notes yet.")
+    for r in sorted(rows, key=lambda r: r["last_checked"] or "", reverse=True):
+        print(f"{r['label']} · updated {r['last_updated'] or 'never'} · checked {r['last_checked'] or 'never'} · "
+              f"{len(r['seen']):,} messages seen · {r['path'].with_suffix('.md')}")
+
 # --------------------------------------------------------------------- main
 
 def main():
@@ -923,6 +1052,11 @@ def main():
     s = sub.add_parser("style"); s.add_argument("--who"); s.add_argument("--since"); s.add_argument("--limit", type=int, default=60)
     s.set_defaults(fn=cmd_style)
     s = sub.add_parser("who"); s.add_argument("who"); s.set_defaults(fn=cmd_who)
+    s = sub.add_parser("thread-notes"); s.add_argument("who"); s.add_argument("--since"); s.add_argument("--limit", type=int, default=300)
+    s.set_defaults(fn=cmd_notes)
+    s = sub.add_parser("thread-notes-mark"); s.add_argument("who"); s.add_argument("--result", required=True, choices=["updated", "unchanged"])
+    s.set_defaults(fn=cmd_notes_mark)
+    sub.add_parser("thread-notes-list").set_defaults(fn=cmd_notes_list)
 
     a = p.parse_args()
     for sp in ("fresh",):

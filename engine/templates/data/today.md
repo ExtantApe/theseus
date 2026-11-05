@@ -1,5 +1,5 @@
 # 📌 Today
-_Not built yet. Run /status in Claude Code._
+_Not built yet. Run /refresh in Claude Code._
 
 ## ✍️ Jot here
 

@@ -42,6 +42,7 @@ copy_engine() {
   fi
   mkdir -p "$WS/.claude/commands" "$WS/bin" "$WS/cache" "$WS/exports" "$WS/briefings" "$WS/logs" \
            "$WS/data/drafts" "$WS/data/archive" "$WS/data/prep"
+  for old in status review voice thread-report text-research sync-check compliance-check; do rm -f "$WS/.claude/commands/$old.md"; done  # renamed
   cp "$WS/engine/workflows/"*.md "$WS/.claude/commands/"          # engine-managed
   cp "$WS/engine/templates/settings.json" "$WS/.claude/settings.json"   # engine-managed; put overrides in settings.local.json
   for f in "$WS/engine/templates/data/"*; do                          # personal: only create if missing

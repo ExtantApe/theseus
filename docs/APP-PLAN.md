@@ -55,7 +55,7 @@ Theseus.app/
 | **Use my Claude Code** (default) | The app launches the user's own installed `claude` CLI in the workspace (same as the scheduled jobs). Sign-in happens in Claude Code's own flow, in Terminal. | user's own plan | The app never touches credentials. If Claude Code isn't installed, the app links to Anthropic's official installer (it doesn't bundle Claude Code). |
 | **Use an API key** | Same CLI or Agent SDK, with the user's own Anthropic API key from the macOS Keychain passed as an environment variable. | user's own API account, pay per use | Anthropic's recommended route for developer-built apps. |
 
-Both modes run the **same commands** (`/status`, `/next`, …) against the same workspace, so the engine code doesn't change.
+Both modes run the **same commands** (`/refresh`, `/next`, …) against the same workspace, so the engine code doesn't change.
 The monthly compliance check covers the app too. If Anthropic's rules change, the affected mode is disabled with an explanation.
 
 ## 3. Screens

@@ -114,7 +114,7 @@ bash ~/Theseus/engine/install.sh --schedule
 ## 6. Everyday use
 | Say / type | What happens |
 |---|---|
-| `/status` | full fresh re-run of everything, any time |
+| `/refresh` | full fresh re-run of everything, any time |
 | `/add call the bank Friday 10am` | dictate anything; Theseus places it |
 | `/add water the plants every other Saturday` | a repeating task: one Reminder that repeats, plus one ↻ item on your list |
 | a note in your Notes inbox folder | ingested on the next run, then moved to Processed |
@@ -122,11 +122,14 @@ bash ~/Theseus/engine/install.sh --schedule
 | `/texts` → "sprint" | who's waiting on a reply; knock out the easy ones |
 | `/reply Sam` | Sam's open questions, asked as if Sam asked you; then a draft in your words. **Never sent.** |
 | `/rank`, `/rank now` | quick "A or B?" prioritizing |
-| `/review` | weekly cleanup and learning |
-| `/thread-report Sam since 2021` | neutral, timestamped account of a long thread |
-| `/text-research every mention of the lake house` | search and compile across your texts |
-| `/sync-check 48210` | is all your message history on this Mac? |
-| `/voice` | refresh your writing-voice profile |
+| `/weekly` | weekly cleanup and learning |
+| `/learn Sam` | deep, neutral notes on how you and Sam talk, only when you ask; reads only messages the notes haven't covered and logs every check |
+| `/mirror Sam` | an unbiased outside read on how you communicate with Sam, with dated examples, only when you ask |
+| `/report Sam since 2021` | neutral, timestamped account of a long thread |
+| `/research every mention of the lake house` | search and compile across your texts |
+| `/history 48210` | is all your message history on this Mac? |
+| `/tone` | refresh your writing-voice profile |
+| `/commands` | every command at a glance |
 
 **Placement hints (optional):** "now", "next week", "someday", "#Work", "remind me at 3", "groceries: eggs", "top".
 Without a hint, Theseus decides from context. A note *titled* "NOW" or "Work" applies that hint to every line in it.
@@ -162,13 +165,13 @@ Text yourself "status", "what's next, 20 min" or "add call the vet Friday", and 
 
 ## 7. Is all my message history here?
 1. iPhone → Settings → [your name] → iCloud → **Messages** shows how many messages are in iCloud (Mac: System Settings → [name] → iCloud → Messages).
-2. `/sync-check <that number>` compares it with this Mac, and shows messages per year, empty months, and how far back your biggest conversations go.
+2. `/history <that number>` compares it with this Mac, and shows messages per year, empty months, and how far back your biggest conversations go.
 
 If history looks incomplete, try these in order:
 1. **Set "Keep Messages" to Forever** on iPhone and Mac. Do this first: 30-day or 1-year settings delete old messages everywhere.
 2. Same Apple Account on both devices, with Messages in iCloud **on** for both. Make sure iCloud storage isn't full.
 3. **Sync Now** on the iPhone (Settings → [name] → iCloud → Messages) while it's plugged in on Wi-Fi.
-4. **Sync Now** on the Mac (Messages → Settings → iMessage). Leave it awake and plugged in, with Messages open, overnight, and re-run `/sync-check`.
+4. **Sync Now** on the Mac (Messages → Settings → iMessage). Leave it awake and plugged in, with Messages open, overnight, and re-run `/history`.
 5. Last resort, a full re-download: quit Messages, **back up `~/Library/Messages`**, move it aside, restart, and let it re-download.
    Mac-only history would then exist only in your backup. Theseus can still read it: `IMSG_CHAT_DB=/path/to/backup/chat.db`.
 
@@ -242,7 +245,7 @@ Every change is logged in `data/log.md`.
 ├── data/                     master list, priorities, voice, sync map, logs, drafts
 ├── briefings/ exports/ logs/ cache/
 ├── engine/                   rules, tools, workflows (replaced on update)
-├── .claude/commands/         /status /add /next /inbox /texts /reply /rank /review /migrate …
+├── .claude/commands/         /refresh /add /next /inbox /texts /reply /rank /weekly /migrate …
 └── bin/ek                    Calendar & Reminders bridge (built on install)
 ```
 

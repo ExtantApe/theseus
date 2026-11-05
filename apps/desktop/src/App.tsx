@@ -26,6 +26,7 @@ type Status = {
   engine_version: string
 }
 type Run = { file: string; kind: string; when: string; bytes: number }
+type ThreadNote = { id: string; label: string; last_updated: string | null; last_checked: string | null; seen: number }
 type Permission = { id: string; name: string; why: string; state: 'ok' | 'ask' | 'denied' | 'unknown'; detail: string }
 type Section = { title: string; lines: string[] }
 
@@ -312,7 +313,11 @@ function Activity({ status, onChange, onSetup }: { status: Status | null; onChan
   const [plan, setPlan] = useState<{ days?: { morning_run?: string; nightly_run?: string }[] } | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [output, setOutput] = useState('')
+  const [notes, setNotes] = useState<ThreadNote[]>([])
+  const [openNote, setOpenNote] = useState<string | null>(null)
+  const [noteText, setNoteText] = useState('')
   useEffect(() => {
+    invoke<ThreadNote[]>('thread_notes').then(setNotes)
     invoke<Run[]>('recent_runs').then(setRuns)
     invoke<typeof plan>('schedule').then(setPlan)
   }, [status?.last_job])
@@ -321,6 +326,12 @@ function Activity({ status, onChange, onSetup }: { status: Status | null; onChan
     setOpen(f)
     setOutput('')
     invoke<string>('read_run', { file: f }).then(setOutput)
+  }
+  const showNote = (id: string) => {
+    if (openNote === id) return setOpenNote(null)
+    setOpenNote(id)
+    setNoteText('')
+    invoke<string>('read_thread_note', { id }).then(setNoteText)
   }
   if (!status) return null
   const pill = !status.hosting ? ['', 'From Terminal'] : status.remote_state === 'running' ? ['ok', 'Connected'] : status.remote_state === 'error' ? ['bad', 'Not connected'] : ['warn', 'Starting']
@@ -381,6 +392,22 @@ function Activity({ status, onChange, onSetup }: { status: Status | null; onChan
           </div>
         ))}
       </div>
+
+      {notes.length > 0 && (
+        <div className="card">
+          <div className="card-title">Thread notes</div>
+          {notes.map((n) => (
+            <div key={n.id}>
+              <button className="item click" onClick={() => showNote(n.id)} aria-expanded={openNote === n.id}>
+                <Icon name="chevron" className={`chev ${openNote === n.id ? 'open' : ''}`} />
+                <span className="grow title">{n.label}</span>
+                <span className="muted small num">Updated {n.last_updated ?? 'never'} · checked {n.last_checked ?? 'never'}</span>
+              </button>
+              {openNote === n.id && <pre className="run-out">{noteText || 'Loading…'}</pre>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -393,6 +420,12 @@ function Setup({ status, onChange }: { status: Status | null; onChange: () => vo
   const [msg, setMsg] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [commands, setCommands] = useState<string | null>(null)
+  const toggleCommands = () => {
+    if (commands !== null) return setCommands(null)
+    setCommands('')
+    invoke<string>('read_commands').then(setCommands)
+  }
   const load = useCallback(() => invoke<Permission[]>('permissions').then(setPerms), [])
   useEffect(() => {
     void load()
@@ -487,6 +520,15 @@ function Setup({ status, onChange }: { status: Status | null; onChange: () => vo
           </div>
         </div>
       )}
+
+      <div className="card">
+        <button className="item click" onClick={toggleCommands} aria-expanded={commands !== null}>
+          <Icon name="chevron" className={`chev ${commands !== null ? 'open' : ''}`} />
+          <span className="grow title">Commands</span>
+          <span className="muted small">Every command, at a glance</span>
+        </button>
+        {commands !== null && <pre className="run-out selectable">{commands || 'Loading…'}</pre>}
+      </div>
 
       {status && <div className="muted small selectable">Workspace {status.workspace} · Claude Code {status.claude}</div>}
     </div>

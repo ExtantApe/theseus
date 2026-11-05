@@ -10,19 +10,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-HELP = """Theseus at the command line.
-
-  theseus                 chat with Theseus in this Terminal
-  theseus "a question"    ask one thing and print the answer
-  theseus status          your list and what's running (instant)
-  theseus next [n]        the top of your list, 5 by default (instant)
-  theseus add "text"      put something on the list, in NEXT unless you add --to <section> (instant)
-  theseus sync            sync now, the same run the schedule starts
-  theseus morning         run the morning briefing now
-  theseus version         the installed version
-
-status, next and add don't use Claude. The rest run on your own Claude Code, with the same rules: nothing is ever sent."""
-
 SEP = " · "
 ITEM = re.compile(r"^- \[( |x|X)\] (.*)$")
 
@@ -33,10 +20,14 @@ def fail(message, code=1):
 
 
 def workspace():
-    """THESEUS_HOME, then the workspace this copy of the engine lives in, then wherever the installer said, then the default."""
+    """THESEUS_HOME if set, and nothing else then. Otherwise the workspace this copy of the engine lives in, then wherever the installer said, then the default."""
+    home = os.environ.get("THESEUS_HOME")
+    if home:
+        # Someone asked for this workspace by name, so never quietly change the real list instead.
+        if (Path(home) / "config.json").exists():
+            return Path(home)
+        fail(f"THESEUS_HOME is set to {home}, but there's no Theseus workspace there, so nothing changed.")
     candidates = []
-    if os.environ.get("THESEUS_HOME"):
-        candidates.append(Path(os.environ["THESEUS_HOME"]))
     candidates.append(Path(__file__).resolve().parents[2])
     pointer = Path.home() / "Library/Application Support/Theseus/workspace"
     if pointer.exists():
@@ -139,6 +130,28 @@ def next_up(ws, args):
         print(f"…and {len(todo) - limit} more in {now[0]}.")
 
 
+def save_master(ws, before, lines, event):
+    """Saves the list and tells the next sync what changed. False if something else just saved, so the caller starts over on what it saved."""
+    path = ws / "data/master.md"
+    now = dt.datetime.now()
+    archive = ws / "data/archive"
+    archive.mkdir(parents=True, exist_ok=True)
+    backup = archive / f"master-app-{now:%Y-%m-%d-%H}.md"
+    if not backup.exists():
+        backup.write_text(before)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".master.md.")
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines))
+    # Last look before the swap, the same as the app.
+    if path.read_text() != before:
+        os.unlink(tmp)
+        return False
+    os.replace(tmp, path)
+    with open(ws / "data/app-edits.jsonl", "a") as f:
+        f.write(json.dumps({**event, "time": f"{now:%Y-%m-%d %H:%M}"}, ensure_ascii=False) + "\n")
+    return True
+
+
 def add(ws, args):
     to = None
     if "--to" in args:
@@ -151,7 +164,6 @@ def add(ws, args):
     title = re.sub(r"\s*·\s*", " - ", " ".join(args)).replace("\n", " ").strip()
     if not title:
         fail('Usage: theseus add "text" [--to section]', 2)
-    path = ws / "data/master.md"
     for _ in range(3):
         before = read_master(ws)
         found = [s for s in sections(before) if not is_done(s[0].lower())]
@@ -169,26 +181,96 @@ def add(ws, args):
         while at > heading + 1 and not lines[at - 1].strip():   # ahead of the section's trailing blank lines
             at -= 1
         lines.insert(at, f"- [ ] {title} · #Inbox")
-        now = dt.datetime.now()
-        archive = ws / "data/archive"
-        archive.mkdir(parents=True, exist_ok=True)
-        backup = archive / f"master-app-{now:%Y-%m-%d-%H}.md"
-        if not backup.exists():
-            backup.write_text(before)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".master.md.")
-        with os.fdopen(fd, "w") as f:
-            f.write("\n".join(lines))
-        # Last look before the swap, the same as the app: if something else just saved, start over on what it saved.
-        if path.read_text() != before:
-            os.unlink(tmp)
+        if not save_master(ws, before, lines, {"action": "add", "id": None, "title": title, "to": name.lower()}):
             continue
-        os.replace(tmp, path)
-        with open(ws / "data/app-edits.jsonl", "a") as f:
-            f.write(json.dumps({"action": "add", "id": None, "title": title, "to": name.lower(), "time": f"{now:%Y-%m-%d %H:%M}"}, ensure_ascii=False) + "\n")
         print(f"Added to {name}: {title}")
         print("The next sync gives it a category and carries it to your other lists.")
         return
     fail("The list kept changing while I tried to add that, so nothing was added. Try again in a moment.")
+
+
+def with_segment(parts, segment):
+    """Adds a segment just before the id, the same as the app."""
+    at = next((i for i, p in enumerate(parts) if p.startswith("id:")), len(parts))
+    return parts[:at] + [segment] + parts[at:]
+
+
+def open_matches(text, query):
+    """Items still to do that match an id or part of a title. An exact title beats a partial one."""
+    lines = text.split("\n")
+    hits = []
+    for title, heading, end in sections(text):
+        if is_done(title.lower()):
+            continue
+        for i in range(heading + 1, end):
+            m = ITEM.match(lines[i])
+            if not m or m.group(1) != " ":
+                continue
+            parts = [p.strip() for p in m.group(2).split(SEP)]
+            if any(re.match(r"done for now\b", p) for p in parts[1:]):
+                continue
+            hits.append({"line": i, "section": title, "parts": parts})
+    q = query.lower()
+    by_id = [h for h in hits if f"id:{q}" in (p.lower() for p in h["parts"])]
+    exact = [h for h in hits if h["parts"][0].lower() == q]
+    return by_id or exact or [h for h in hits if q in h["parts"][0].lower()]
+
+
+def done(ws, args):
+    query = " ".join(args).strip()
+    if not query:
+        fail('Usage: theseus done "part of the title"', 2)
+    for _ in range(3):
+        before = read_master(ws)
+        hits = open_matches(before, query)
+        if not hits:
+            fail(f'Nothing still to do matches "{query}".')
+        if len(hits) > 1:
+            names = "\n".join(f"  {h['parts'][0]} ({h['section']})" for h in hits[:10])
+            fail(f'"{query}" matches {len(hits)} items, so nothing changed. Use more of the title:\n{names}', 3)
+        hit = hits[0]
+        lines = before.split("\n")
+        at, parts, now = hit["line"], hit["parts"], dt.datetime.now()
+        stamp = f"{now.month}/{now.day}"
+        id_ = next((p[3:] for p in parts if p.startswith("id:")), None)
+        repeating = any(p.startswith("↻") for p in parts[1:])
+        if repeating:
+            lines[at] = "- [ ] " + SEP.join(with_segment(parts, f"done for now {stamp}"))
+        else:
+            end = at + 1
+            while end < len(lines) and lines[end].startswith(("  ", "\t")):   # its notes go with it
+                end += 1
+            was = hit["section"].lower().replace(" ", "-")
+            moved = ["- [x] " + SEP.join(with_segment(with_segment(parts, f"done {stamp}"), f"was:{was}"))] + lines[at + 1:end]
+            del lines[at:end]
+            rest = "\n".join(lines)
+            target = next((s for s in sections(rest) if is_done(s[0].lower())), None)
+            if target:
+                _, heading, stop = target
+                first = next((i for i in range(heading + 1, stop) if ITEM.match(lines[i])), None)
+                lines[(first if first is not None else heading + 1):0] = moved
+            else:
+                while lines and not lines[-1].strip():
+                    lines.pop()
+                lines += ["", "## ✅ DONE"] + moved + [""]
+        if not save_master(ws, before, lines, {"action": "complete", "id": id_, "title": parts[0], "repeating": repeating}):
+            continue
+        print(f"Done: {parts[0]}" + (" (repeats, so it's done for now)" if repeating else ""))
+        print("The next sync carries it to your other lists.")
+        return
+    fail("The list kept changing while I tried to check that off, so nothing changed. Try again in a moment.")
+
+
+def today(ws):
+    path = ws / "data/today.md"
+    if not path.exists():
+        fail('There\'s no Today note yet. It\'s built by the next sync, or run: theseus sync')
+    print(path.read_text().rstrip())
+
+
+def texts(ws, args):
+    """Who's waiting on you, straight from the local message tool."""
+    sys.exit(subprocess.call(["/usr/bin/python3", str(ws / "engine/tools/imsg.py"), "missed", *args], cwd=ws, env={**os.environ, "THESEUS_HOME": str(ws)}))
 
 
 def run_job(ws, job):
@@ -206,7 +288,7 @@ def ask(ws, question):
 def main():
     args = sys.argv[1:]
     if args and args[0] in ("help", "--help", "-h"):
-        print(HELP)
+        print((Path(__file__).resolve().parents[1] / "commands.txt").read_text().rstrip())
         return
     ws = workspace()
     if not args:
@@ -223,6 +305,12 @@ def main():
         next_up(ws, rest)
     elif command == "add":
         add(ws, rest)
+    elif command == "done":
+        done(ws, rest)
+    elif command == "today" and not rest:
+        today(ws)
+    elif command == "texts":
+        texts(ws, rest)
     elif command in ("version", "--version") and not rest:
         print((ws / "engine/VERSION").read_text().strip())
     elif len(args) == 1 and not re.search(r"\s", command):
