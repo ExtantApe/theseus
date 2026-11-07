@@ -22,7 +22,7 @@ if [[ $ON_MAC == 0 && -z "${THESEUS_SKIP_MAC:-}" ]]; then echo "Theseus runs on 
 
 uid() { id -u; }
 if [[ "$MODE" == "--unschedule" ]]; then
-  for j in morning nightly sync check channel remote watchdog; do
+  for j in morning nightly sync check channel remote watchdog wall; do
     p="$HOME/Library/LaunchAgents/com.theseus.$j.plist"
     launchctl bootout "gui/$(uid)" "$p" 2>/dev/null || true; rm -f "$p"
   done
@@ -39,6 +39,9 @@ copy_engine() {
     rm -rf "$WS/engine.new" && cp -R "$SRC/engine" "$WS/engine.new"
     rm -rf "$WS/engine" && mv "$WS/engine.new" "$WS/engine"
     mkdir -p "$WS/docs" && cp -R "$SRC/docs/." "$WS/docs/"
+    if [[ -d "$SRC/apps/wall/pi" ]]; then   # what `theseus wall setup` hands to a Pi
+      rm -rf "$WS/wall" && mkdir -p "$WS/wall" && cp -R "$SRC/apps/wall/display" "$SRC/apps/wall/pi" "$WS/wall/"
+    fi
   fi
   mkdir -p "$WS/.claude/commands" "$WS/bin" "$WS/cache" "$WS/exports" "$WS/briefings" "$WS/logs" \
            "$WS/data/drafts" "$WS/data/archive" "$WS/data/prep"
@@ -51,7 +54,7 @@ copy_engine() {
   [[ -e "$WS/config.json" ]] || cp "$WS/engine/templates/config.json" "$WS/config.json"
   [[ -e "$WS/profile.md" ]]  || cp "$WS/engine/templates/profile.md"  "$WS/profile.md"
   [[ -e "$WS/CLAUDE.md" ]]   || cp "$WS/engine/templates/CLAUDE.md"   "$WS/CLAUDE.md"
-  printf 'cache/\nexports/\nlogs/\nbriefings/\ndata/\nprofile.md\nconfig.json\nbin/\n' > "$WS/.gitignore"
+  printf 'cache/\nexports/\nlogs/\nbriefings/\ndata/\nprofile.md\nconfig.json\nbin/\nwall/\n.wall/\n' > "$WS/.gitignore"
   chmod +x "$WS/engine/tools/"*.py "$WS/engine/scheduled/"*.sh "$WS/engine/bin/"* 2>/dev/null || true
   # Theseus.app starts from Finder without your shell's THESEUS_HOME, so this is how it finds a workspace that isn't ~/Theseus.
   mkdir -p "$HOME/Library/Application Support/Theseus" && printf '%s\n' "$WS" > "$HOME/Library/Application Support/Theseus/workspace"

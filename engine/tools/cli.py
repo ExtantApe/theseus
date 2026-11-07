@@ -338,6 +338,9 @@ def main():
         done(ws, rest)
     elif command == "undo" and not rest:
         undo(ws)
+    elif command == "wall":
+        import wall  # only when asked: most people have no screen, and it needs nothing else here
+        wall.main(rest)
     elif command == "today" and not rest:
         today(ws)
     elif command == "texts":

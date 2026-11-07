@@ -1,0 +1,696 @@
+<!doctype html>
+<!--
+  Prototype of the Theseus wall builder. The tasks are invented and nothing leaves this page; changes save in this browser only.
+  Spec: docs/design/wall-display.md. Text only ever goes in through textContent, because titles come from outside sources.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Theseus wall builder (prototype)</title>
+<style>
+  /* App chrome: tokens from apps/desktop/src/ui/family.css */
+  :root {
+    color-scheme: light dark;
+    --bg: #fbf8f2; --side: #f3eee5; --panel: #fff; --field: #fff; --text: #2e201c; --muted: #7a6a63; --border: #e6dfd3; --hover: #4c312c0f;
+    --accent: #17565a; --accent-soft: #17565a1a; --bad: #b83a2a; --focus: #cf8137;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #161210; --side: #1c1714; --panel: #231d19; --field: #1c1714; --text: #f2ebe0; --muted: #a89a8f; --border: #372e28; --hover: #f2ebe00f;
+    --accent: #6fc4bd; --accent-soft: #6fc4bd22; --bad: #ee8a78; --focus: #e7a066;
+  } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  h1, h2, h3, p { margin: 0; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); white-space: nowrap; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .45; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.wide { width: 100%; }
+  .btn.danger { color: var(--bad); }
+
+  .app { height: 100%; display: grid; grid-template: auto minmax(0, 1fr) / 208px minmax(0, 1fr) 256px; }
+  .bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .bar h1 { font-size: 15px; font-weight: 600; margin-right: 6px; }
+  .grow { flex: 1; }
+  .said { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .said.bad { color: var(--bad); }
+  .side { overflow: auto; background: var(--side); padding: 12px 10px; }
+  .side.right { border-left: 1px solid var(--border); padding: 14px; }
+  .side.left { border-right: 1px solid var(--border); }
+  .group { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 12px 6px 6px; }
+  .group:first-child { margin-top: 0; }
+  .piece { width: 100%; display: block; text-align: left; padding: 7px 9px; margin-bottom: 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); cursor: grab; touch-action: none; }
+  .piece:hover { border-color: var(--accent); }
+  .piece b { display: block; font-weight: 500; }
+  .piece span { display: block; font-size: 11px; color: var(--muted); }
+  .middle { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .tabs { display: flex; gap: 4px; align-items: center; padding: 8px 12px; overflow-x: auto; border-bottom: 1px solid var(--border); flex: none; }
+  .tab { height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); white-space: nowrap; }
+  .tab:hover { background: var(--hover); }
+  .tab[aria-selected='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .room { flex: 1; min-height: 0; padding: 18px; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+  label.field { display: block; margin-bottom: 11px; }
+  label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  input[type='text'], input[type='time'], input[type='number'], select, textarea { width: 100%; min-height: 32px; padding: 4px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--field); user-select: text; -webkit-user-select: text; }
+  textarea { resize: vertical; min-height: 64px; }
+  label.check { display: flex; gap: 7px; align-items: center; margin-bottom: 9px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .side h2 { font-size: 14px; font-weight: 600; margin-bottom: 11px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 11px; }
+  .rule { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+  .actions { display: grid; gap: 6px; }
+
+  /* The screen. Everything inside it is sized from --u, so the editor, the preview and the TV all draw the same picture. */
+  .stage { position: relative; flex: none; background: #161210; color: #f2ebe0; border-radius: 6px; box-shadow: 0 0 0 1px #0005, 0 6px 26px #0003; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; --panel2: #231d19; --line: #372e28; --mute: #a89a8f; --teal: #6fc4bd; --hero: #17484a; --amber: #e7a066; }
+  .inner { position: absolute; inset: calc(2.6 * var(--u)) calc(3 * var(--u)); }
+  .editing .inner { background-image: linear-gradient(#f2ebe00c 1px, transparent 1px), linear-gradient(90deg, #f2ebe00c 1px, transparent 1px); background-size: calc(100% / var(--cols)) calc(100% / var(--rows)); outline: 1px dashed #f2ebe01f; }
+  .tile { position: absolute; padding: calc(.6 * var(--u)); }
+  .editing .tile { cursor: grab; touch-action: none; }
+  .editing .tile:hover .body { box-shadow: 0 0 0 1px #f2ebe040; }
+  .editing .tile.on .body { box-shadow: 0 0 0 2px var(--teal); }
+  .editing .tile.bad .body { box-shadow: 0 0 0 2px #ee8a78; opacity: .6; }
+  .editing .tile.moving { z-index: 5; cursor: grabbing; }
+  .editing .body > * { pointer-events: none; }
+  .body { width: 100%; height: 100%; overflow: hidden; border-radius: calc(1 * var(--u)); position: relative; }
+  .h { position: absolute; width: 18px; height: 18px; z-index: 6; display: none; touch-action: none; }
+  .tile.on .h { display: block; }
+  .h::after { content: ''; position: absolute; inset: 5px; background: var(--teal); border-radius: 3px; box-shadow: 0 0 0 1.5px #161210; }
+  .h.n { top: -4px; left: calc(50% - 9px); cursor: ns-resize; } .h.s { bottom: -4px; left: calc(50% - 9px); cursor: ns-resize; }
+  .h.e { right: -4px; top: calc(50% - 9px); cursor: ew-resize; } .h.w { left: -4px; top: calc(50% - 9px); cursor: ew-resize; }
+  .h.ne { top: -4px; right: -4px; cursor: nesw-resize; } .h.nw { top: -4px; left: -4px; cursor: nwse-resize; }
+  .h.se { bottom: -4px; right: -4px; cursor: nwse-resize; } .h.sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+  .drop { position: absolute; z-index: 4; border-radius: calc(1 * var(--u)); background: #6fc4bd33; box-shadow: inset 0 0 0 2px var(--teal); pointer-events: none; }
+  .drop.bad { background: #ee8a7833; box-shadow: inset 0 0 0 2px #ee8a78; }
+  .blank { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--mute); font-size: calc(3 * var(--u)); text-align: center; pointer-events: none; }
+
+  /* Pieces, as they appear on the screen */
+  .card { height: 100%; padding: calc(1.5 * var(--u)) calc(2 * var(--u)); background: var(--panel2); border: 1px solid var(--line); border-radius: calc(1 * var(--u)); display: flex; flex-direction: column; min-height: 0; }
+  .plain { height: 100%; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+  .label { flex: none; display: flex; justify-content: space-between; gap: 1em; font-size: calc(2.3 * var(--u)); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--teal); margin-bottom: calc(.6 * var(--u)); }
+  .label i { color: var(--mute); font-style: normal; font-weight: 500; letter-spacing: 0; }
+  .rows { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow: hidden; }
+  .row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: calc(1.2 * var(--u)); align-items: baseline; padding: calc(.6 * var(--u)) 0; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row .r { min-width: 1.4em; color: var(--mute); font-size: .8em; font-variant-numeric: tabular-nums; }
+  .row .t { font-weight: 500; line-height: 1.18; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .row .d { color: var(--mute); font-size: .78em; white-space: nowrap; }
+  .late { color: var(--amber) !important; }
+  .extra { flex: none; color: var(--mute); font-size: calc(2.3 * var(--u)); padding-top: calc(.5 * var(--u)); }
+  .top { height: 100%; padding: calc(2 * var(--u)) calc(3 * var(--u)); background: var(--hero); border-radius: calc(1 * var(--u)); display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+  .top .num { color: var(--teal); opacity: .75; font-size: calc(2.6 * var(--u)); font-variant-numeric: tabular-nums; margin-bottom: .2em; }
+  .top .tt { font-weight: 600; line-height: 1.12; letter-spacing: -.012em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .top .m { margin-top: .4em; display: flex; flex-wrap: wrap; gap: 0 1em; color: #c9dcd8; font-size: calc(2.7 * var(--u)); }
+  .clock { line-height: 1; font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .clock small { font-size: .3em; letter-spacing: 0; color: var(--mute); margin-left: .25em; font-weight: 400; }
+  .date { color: var(--mute); margin-top: .35em; white-space: nowrap; }
+  .sectors { flex: 1; min-height: 0; column-gap: calc(1.6 * var(--u)); height: 100%; overflow: hidden; }
+  .sector { break-inside: avoid; margin-bottom: calc(1.4 * var(--u)); padding: calc(1.2 * var(--u)) calc(1.8 * var(--u)); background: var(--panel2); border: 1px solid var(--line); border-radius: calc(1 * var(--u)); }
+  .sector .rows { overflow: visible; }
+  .sector .row { grid-template-columns: auto minmax(0, 1fr); }
+  .sector .row .d { grid-column: 2; margin-top: .1em; }
+  .count { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; padding: calc(.9 * var(--u)) 0; border-top: 1px solid var(--line); color: var(--mute); font-size: calc(3 * var(--u)); }
+  .count:first-child { border-top: 0; }
+  .count b { color: #f2ebe0; font-weight: 500; font-size: 1.4em; font-variant-numeric: tabular-nums; }
+  .counts-row { display: flex; gap: calc(4 * var(--u)); justify-content: center; }
+  .counts-row .count { border-top: 0; padding: 0; }
+  .note { white-space: pre-wrap; line-height: 1.25; overflow: hidden; }
+  .status { height: 100%; display: flex; align-items: center; gap: .6em; color: var(--mute); font-size: calc(2.4 * var(--u)); white-space: nowrap; }
+  .status .dot { width: .55em; height: .55em; border-radius: 50%; background: var(--teal); }
+
+  .preview { position: fixed; inset: 0; z-index: 50; background: #000; display: flex; align-items: center; justify-content: center; }
+  .preview .stage { border-radius: 0; box-shadow: none; }
+  .preview .tip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); padding: 5px 12px; border-radius: 8px; background: #000b; color: #f2ebe0; font-size: 12px; z-index: 2; }
+  .ghost { position: fixed; z-index: 60; padding: 6px 10px; border-radius: 8px; background: var(--accent); color: var(--bg); pointer-events: none; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <h1>Wall</h1>
+    <span class="said" id="said" role="status" aria-live="polite"></span>
+    <span class="grow"></span>
+    <button class="btn quiet" id="undo">Undo</button>
+    <button class="btn quiet" id="redo">Redo</button>
+    <select id="screen" aria-label="Screen shape" style="width:auto"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
+    <button class="btn" id="reset">Start over</button>
+    <button class="btn primary" id="play">Preview</button>
+  </header>
+  <aside class="side left" id="palette" aria-label="Pieces"></aside>
+  <main class="middle">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Views"></div>
+    <div class="room" id="room"></div>
+  </main>
+  <aside class="side right" id="panel" aria-label="Settings"></aside>
+</div>
+<script>
+// ---------- Invented data, in the shape the Mac would send. Communications and Done are never in it. ----------
+const NOW = new Date('2026-11-05T08:42:00')
+const t = (title, category, due, due_date) => ({ title, category, due: due || null, due_date: due_date || null })
+const DATA = {
+  sections: {
+    Now: [t('Renew the business license', 'Work', 'Thu 11/5', '2026-11-05'), t('Send the signed lease back', 'Home', 'Tue 11/3', '2026-11-03'), t('Draft the budget memo', 'Work'), t('Book flights for the reunion', 'Family', 'Fri 11/6', '2026-11-06'), t('Pay the quarterly estimate', 'Money', 'Mon 11/9', '2026-11-09'), t('Order furnace filters', 'Home'), t('Schedule the annual checkup', 'Health'), t('Call about the gutter estimate', 'Home', '11/12', '2026-11-12'), t('Pick a date for the car service', 'Car', '11/14', '2026-11-14'), t('Sign the permission slip', 'Family', 'Fri 11/6', '2026-11-06'), t('Edit episode twelve', 'Podcast'), t('Move savings to the new account', 'Money'), t('Reply to the vendor proposal', 'Work')],
+    Next: [t('Compare insurance quotes', 'Money'), t('Clean out the garage shelves', 'Home'), t('Outline the spring plan', 'Work'), t('Find a new pediatric dentist', 'Family', '11/20', '2026-11-20'), t('Record the intro segment', 'Podcast'), t('Replace the hallway light', 'Home'), t('Renew the passport', 'Family', '12/1', '2026-12-01'), t('Tune up the bike', 'Health')],
+    Later: [t('Refinish the deck', 'Home'), t('Plan the summer trip', 'Family'), t('Redo the website about page', 'Work'), t('Sort the photo backlog', 'Family'), t('Review the retirement plan', 'Money')],
+    'Waiting on': [t('Quote from the roofer', 'Home'), t('Contract back from legal', 'Work'), t('Refund from the airline', 'Money')],
+  },
+  kept_private: 1,
+  generated_at: new Date('2026-11-05T08:41:00'),
+}
+// One number per task, the same on every view.
+let spoken = 0
+for (const list of Object.values(DATA.sections)) for (const x of list) x.rank = ++spoken
+const SECTIONS = Object.keys(DATA.sections)
+const SECTORS = [...new Set(Object.values(DATA.sections).flat().map((x) => x.category))]
+const SIZES = { S: 2.6, M: 3.2, L: 4.2, XL: 5.6 }
+
+function dueDays(i) {
+  if (!i.due_date) return null
+  const midnight = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate())
+  return Math.round((new Date(`${i.due_date}T00:00`) - midnight) / 86400000)
+}
+function dueLabel(i) {
+  const d = dueDays(i)
+  if (d === null) return i.due
+  if (d === 0) return 'Due today'
+  if (d > 0) return i.due
+  return `Was due ${d >= -6 ? new Date(`${i.due_date}T00:00`).toLocaleDateString('en-US', { weekday: 'short' }) : i.due}`
+}
+
+// ---------- The pieces: each has a name, a default size and its options ----------
+const PIECES = {
+  top: { name: 'Top task', about: 'The one thing to do first', w: 16, h: 4, opts: { section: 'Now', size: 'XL' } },
+  list: { name: 'Task list', about: 'Any section, in your order', w: 8, h: 8, opts: { label: '', section: 'Now', sector: 'All', skipTop: false, due: true, rank: true, size: 'M' } },
+  sector: { name: 'One sector', about: 'A single category', w: 8, h: 6, opts: { label: '', section: 'Now', sector: 'Home', skipTop: false, due: true, rank: true, size: 'M' }, as: 'list' },
+  sectors: { name: 'All sectors', about: 'A card per category', w: 24, h: 8, opts: { section: 'Now', skipTop: true, due: true, rank: true, size: 'M' } },
+  due: { name: 'Coming due', about: 'Dates, soonest first', w: 8, h: 6, opts: { label: 'Coming due', days: 14, size: 'M' } },
+  counts: { name: 'Counts', about: 'How much is in each section', w: 6, h: 4, opts: { sections: ['Next', 'Waiting on'] } },
+  clock: { name: 'Clock', about: 'Time and date', w: 7, h: 4, opts: { date: true, size: 'L' } },
+  note: { name: 'Text', about: 'Anything you want to see', w: 8, h: 3, opts: { text: 'One thing at a time.', size: 'L' } },
+  status: { name: 'Status line', about: 'How fresh the list is', w: 8, h: 1, opts: {} },
+}
+const MIN = { top: [4, 2], list: [3, 2], sectors: [4, 2], due: [3, 2], counts: [3, 2], clock: [3, 2], note: [2, 1], status: [3, 1] }
+
+let nextId = 1
+const uid = () => `t${Date.now().toString(36)}${nextId++}`
+function tile(kind, x, y, w, h, opts = {}) {
+  const p = PIECES[kind]
+  return { id: uid(), type: p.as || kind, x, y, w, h, opts: JSON.parse(JSON.stringify({ ...p.opts, ...opts })) }
+}
+function view(name, tiles, when = null) {
+  return { id: uid(), name, when, layouts: { landscape: tiles, portrait: null } }
+}
+function starter() {
+  const views = [
+    view('Sectors', [tile('top', 0, 0, 17, 4), tile('clock', 17, 0, 7, 4), tile('sectors', 0, 4, 24, 9), tile('status', 0, 13, 12, 1)]),
+    view('Ranked', [tile('list', 0, 0, 16, 13, { size: 'L' }), tile('clock', 16, 0, 8, 4), tile('counts', 16, 4, 8, 4), tile('due', 16, 8, 8, 5), tile('status', 0, 13, 12, 1)]),
+    view('One thing', [tile('clock', 0, 0, 24, 3, { size: 'M' }), tile('top', 0, 3, 24, 8, { size: 'XL' }), tile('counts', 0, 11, 24, 2), tile('status', 0, 13, 12, 1)]),
+    view('Board', ['Now', 'Next', 'Later', 'Waiting on'].map((section, n) => tile('list', n * 6, 0, 6, 13, { section, label: section, size: 'S' })).concat(tile('status', 0, 13, 12, 1))),
+    view('Coming due', [tile('due', 0, 0, 15, 13, { size: 'L', days: 60 }), tile('clock', 15, 0, 9, 4), tile('top', 15, 4, 9, 5, { size: 'L' }), tile('note', 15, 9, 9, 4), tile('status', 0, 13, 12, 1)]),
+    view('Home', [tile('sector', 0, 0, 12, 13, { sector: 'Home', label: 'Home', size: 'L' }), tile('sector', 12, 0, 12, 6, { sector: 'Family', label: 'Family', size: 'M' }), tile('sector', 12, 6, 12, 7, { sector: 'Home', section: 'Next', label: 'Home, next', size: 'M' }), tile('status', 0, 13, 12, 1)], { from: '17:00', to: '22:00' }),
+    view('Clock', [tile('clock', 0, 2, 24, 7, { size: 'XL' }), tile('top', 3, 9, 18, 3, { size: 'L' }), tile('status', 0, 13, 12, 1)], { from: '22:00', to: '07:00' }),
+  ]
+  return { screen: 'landscape', titles: true, change: { mode: 'fixed', minutes: 5 }, hours: { from: '06:00', to: '00:00' }, active: views[0].id, views, mine: [] }
+}
+
+// ---------- State: saved as you go, with undo and redo ----------
+const KEY = 'theseus-wall-prototype-v3'
+let state
+try { state = JSON.parse(localStorage.getItem(KEY)) } catch { state = null }
+if (!state || !Array.isArray(state.views) || !state.views.length) state = starter()
+let selected = null
+const past = []
+const future = []
+const snap = () => JSON.stringify(state)
+function commit(before, words) {
+  if (before === snap()) return render()
+  past.push(before)
+  if (past.length > 200) past.shift()
+  future.length = 0
+  localStorage.setItem(KEY, snap())
+  say(words || 'Saved')
+  render()
+}
+function change(fn, words) { const before = snap(); fn(); commit(before, words) }
+function step(from, to, words) {
+  if (!from.length) return
+  to.push(snap())
+  state = JSON.parse(from.pop())
+  localStorage.setItem(KEY, snap())
+  selected = null
+  say(words)
+  render()
+}
+function say(text, bad) { const e = $('said'); e.textContent = text; e.className = bad ? 'said bad' : 'said' }
+
+const $ = (id) => document.getElementById(id)
+function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e }
+const current = () => state.views.find((v) => v.id === state.active) || state.views[0]
+const dims = (screen = state.screen) => (screen === 'landscape' ? { cols: 24, rows: 14 } : { cols: 14, rows: 24 })
+
+/** A view's portrait layout starts as its landscape pieces stacked in order, and is its own from then on. */
+function layoutOf(v, screen = state.screen) {
+  if (v.layouts[screen]) return v.layouts[screen]
+  const from = v.layouts.landscape || []
+  const order = [...from].sort((a, b) => a.y - b.y || a.x - b.x)
+  const total = order.reduce((n, x) => n + x.h, 0) || 1
+  const { rows, cols } = dims(screen)
+  const room = Math.min(1, rows / total)
+  let y = 0
+  v.layouts[screen] = order.map((x) => {
+    const h = Math.max((MIN[x.type] || [1, 1])[1], Math.floor(x.h * room))
+    const placed = { ...JSON.parse(JSON.stringify(x)), id: uid(), x: 0, y, w: cols, h }
+    y += h
+    return placed
+  }).filter((x) => x.y + x.h <= rows)
+  return v.layouts[screen]
+}
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+function isFree(box, tiles, ignore) {
+  const { cols, rows } = dims()
+  return box.x >= 0 && box.y >= 0 && box.x + box.w <= cols && box.y + box.h <= rows && !tiles.some((x) => x.id !== ignore && overlaps(box, x))
+}
+function firstFree(w, h, tiles) {
+  const { cols, rows } = dims()
+  for (let y = 0; y + h <= rows; y++) for (let x = 0; x + w <= cols; x++) if (isFree({ x, y, w, h }, tiles)) return { x, y, w, h }
+  return null
+}
+
+// ---------- Drawing a piece ----------
+function rowsFor(tasks, o, u) {
+  const list = el('ol', 'rows')
+  list.style.fontSize = `${(SIZES[o.size] || SIZES.M) * u}px`
+  for (const i of tasks) {
+    const row = el('li', 'row', el('span', 'r', o.rank === false ? '' : String(i.rank)), el('span', 't', i.title))
+    if (o.rank === false) row.firstChild.style.minWidth = 0
+    if (o.due !== false && i.due) row.append(el('span', dueDays(i) < 0 && dueDays(i) !== null ? 'd late' : 'd', dueLabel(i)))
+    list.append(row)
+  }
+  return list
+}
+function fitRows(card, list) {
+  // Shows what fits, and says how many didn't. Nothing is shrunk past the size you picked.
+  const total = list.children.length
+  let extra = null
+  while (list.children.length > 1 && list.scrollHeight > list.clientHeight + 1) {
+    list.lastChild.remove()
+    if (!extra) { extra = el('div', 'extra'); card.append(extra) }
+    extra.textContent = `${total - list.children.length} more`
+  }
+}
+function pickTasks(o) {
+  let tasks = DATA.sections[o.section] || []
+  if (o.sector && o.sector !== 'All') tasks = tasks.filter((x) => x.category === o.sector)
+  const first = (DATA.sections[o.section] || [])[0]
+  return o.skipTop ? tasks.filter((x) => x !== first) : tasks
+}
+function draw(body, x, u) {
+  const o = x.opts
+  body.replaceChildren()
+  if (x.type === 'clock') {
+    const h = NOW.getHours() % 12 || 12
+    const size = { S: 7, M: 11, L: 15, XL: 30 }[o.size] || 15
+    const box = el('div', 'plain', el('div', 'clock', `${h}:${String(NOW.getMinutes()).padStart(2, '0')}`, el('small', '', NOW.getHours() < 12 ? 'am' : 'pm')))
+    box.firstChild.style.fontSize = `${size * u}px`
+    if (o.date) { const d = el('div', 'date', NOW.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })); d.style.fontSize = `${Math.max(2.8, size * .24) * u}px`; box.append(d) }
+    body.append(box)
+    // A piece never spills: the clock comes down until it fits the space you gave it.
+    for (let scale = .92; scale > .15 && (box.scrollHeight > body.clientHeight + 1 || box.scrollWidth > body.clientWidth + 1); scale *= .92) {
+      box.firstChild.style.fontSize = `${size * scale * u}px`
+      if (box.children[1]) box.children[1].style.fontSize = `${Math.max(1.8, size * scale * .24) * u}px`
+    }
+  } else if (x.type === 'top') {
+    const first = (DATA.sections[o.section] || [])[0]
+    const box = el('div', 'top')
+    if (first) {
+      const title = el('div', 'tt', first.title)
+      const num = el('div', 'num', `${first.rank}`)
+      title.style.fontSize = `${{ S: 3.2, M: 4.2, L: 5.4, XL: 7 }[o.size] * u}px`
+      const m = el('div', 'm')
+      if (first.due) m.append(el('span', dueDays(first) < 0 ? 'late' : '', dueLabel(first)))
+      m.append(el('span', '', first.category))
+      box.append(num, title, m)
+    } else box.append(el('div', 'tt', `Nothing left in ${o.section}.`))
+    body.append(box)
+  } else if (x.type === 'list') {
+    const tasks = pickTasks(o)
+    const name = o.label || (o.sector && o.sector !== 'All' ? o.sector : o.section)
+    const list = rowsFor(tasks, o, u)
+    const card = el('div', 'card', el('div', 'label', name, el('i', '', String(tasks.length))), list)
+    if (!tasks.length) { const none = el('div', 'extra', 'Nothing here right now.'); card.replaceChild(none, list) }
+    body.append(card)
+    if (tasks.length) fitRows(card, list)
+  } else if (x.type === 'sectors') {
+    const groups = new Map()
+    for (const i of pickTasks(o)) { if (!groups.has(i.category)) groups.set(i.category, []); groups.get(i.category).push(i) }
+    const all = [...groups]
+    const box = el('div', 'sectors')
+    box.style.columns = String(Math.max(1, Math.floor(body.clientWidth / (40 * u))))
+    body.append(box)
+    const card = ([name, tasks], cap) => {
+      const c = el('section', 'sector', el('div', 'label', name, el('i', '', String(tasks.length))), rowsFor(tasks.slice(0, cap), o, u))
+      if (tasks.length > cap) c.append(el('div', 'extra', `${tasks.length - cap} more`))
+      return c
+    }
+    const fits = () => box.scrollWidth <= box.clientWidth + 1 && box.scrollHeight <= box.clientHeight + 1
+    for (let cap = Math.max(1, ...all.map((g) => g[1].length)); cap >= 1; cap--) {
+      box.replaceChildren(...all.map((g) => card(g, cap)))
+      if (fits()) break
+    }
+    let keep = all.length
+    while (keep > 1 && !fits()) box.replaceChildren(...all.slice(0, --keep).map((g) => card(g, 1)))
+  } else if (x.type === 'due') {
+    const seen = new Set()
+    const tasks = Object.values(DATA.sections).flat().filter((i) => dueDays(i) !== null && dueDays(i) <= o.days && !seen.has(i.title) && seen.add(i.title)).sort((a, b) => dueDays(a) - dueDays(b))
+    const list = rowsFor(tasks, { ...o, rank: true, due: true }, u)
+    const card = el('div', 'card', el('div', 'label', o.label || 'Coming due', el('i', '', String(tasks.length))), list)
+    body.append(card)
+    fitRows(card, list)
+  } else if (x.type === 'counts') {
+    const box = el('div', 'card')
+    const rows = el('div', '')
+    for (const s of o.sections || []) rows.append(el('div', 'count', s, el('b', '', String((DATA.sections[s] || []).length))))
+    box.append(rows)
+    body.append(box)
+    if (body.clientWidth > body.clientHeight * 2.4) { rows.className = 'counts-row'; box.style.justifyContent = 'center' }
+  } else if (x.type === 'note') {
+    const n = el('div', 'note', o.text || '')
+    n.style.fontSize = `${(SIZES[o.size] || SIZES.L) * u}px`
+    body.append(el('div', 'plain', n))
+  } else if (x.type === 'status') {
+    const parts = [el('span', 'dot'), 'Up to date · 8:41 am']
+    if (DATA.kept_private) parts.push(` · ${DATA.kept_private} kept private`)
+    body.append(el('div', 'status', ...parts))
+  }
+}
+
+function place(node, box, screen) {
+  const { cols, rows } = dims(screen)
+  node.style.left = `${box.x / cols * 100}%`
+  node.style.top = `${box.y / rows * 100}%`
+  node.style.width = `${box.w / cols * 100}%`
+  node.style.height = `${box.h / rows * 100}%`
+}
+function makeStage(maxW, maxH, screen) {
+  const ratio = screen === 'landscape' ? 16 / 9 : 9 / 16
+  const W = Math.floor(Math.min(maxW, maxH * ratio))
+  const H = Math.floor(W / ratio)
+  const u = screen === 'landscape' ? H / 100 : W * .0113
+  const stage = el('div', 'stage', el('div', 'inner'))
+  stage.style.cssText = `width:${W}px;height:${H}px;--u:${u}px;--cols:${dims(screen).cols};--rows:${dims(screen).rows}`
+  return { stage, inner: stage.firstChild, u }
+}
+
+// ---------- The editor ----------
+function renderCanvas() {
+  const room = $('room')
+  const cs = getComputedStyle(room)
+  const { stage, inner, u } = makeStage(room.clientWidth - parseFloat(cs.paddingLeft) * 2, room.clientHeight - parseFloat(cs.paddingTop) * 2, state.screen)
+  stage.classList.add('editing')
+  room.replaceChildren(stage)
+  const tiles = layoutOf(current())
+  if (!tiles.length) inner.append(el('div', 'blank', 'Drag a piece here to start this view.'))
+  for (const x of tiles) {
+    const node = el('div', 'tile' + (x.id === selected ? ' on' : ''), el('div', 'body'))
+    node.dataset.id = x.id
+    node.tabIndex = 0
+    node.setAttribute('aria-label', `${(PIECES[x.type] || {}).name || x.type}. Arrows move it, Shift and arrows resize it.`)
+    place(node, x)
+    for (const dir of ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']) { const h = el('span', `h ${dir}`); h.dataset.dir = dir; node.append(h) }
+    inner.append(node)
+    draw(node.firstChild, x, u)
+  }
+  inner.addEventListener('pointerdown', (e) => onCanvasDown(e, inner, u))
+}
+
+function cellOf(inner, cx, cy) {
+  const r = inner.getBoundingClientRect()
+  const { cols, rows } = dims()
+  return { col: (cx - r.left) / r.width * cols, row: (cy - r.top) / r.height * rows, inside: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom }
+}
+
+function onCanvasDown(e, inner, u) {
+  const node = e.target.closest('.tile')
+  if (!node) { if (selected) { selected = null; render() } return }
+  const tiles = layoutOf(current())
+  const x = tiles.find((n) => n.id === node.dataset.id)
+  if (!x) return
+  e.preventDefault()
+  const dir = e.target.dataset.dir || null
+  if (selected !== x.id) {
+    selected = x.id
+    inner.querySelectorAll('.tile.on').forEach((n) => n.classList.remove('on'))
+    node.classList.add('on')
+    renderPanel()
+  }
+  const start = cellOf(inner, e.clientX, e.clientY)
+  const was = { x: x.x, y: x.y, w: x.w, h: x.h }
+  let box = { ...was }
+  const before = snap()
+  const { cols, rows } = dims()
+  const [minW, minH] = MIN[x.type] || [2, 1]
+  node.classList.add('moving')
+  const move = (ev) => {
+    const at = cellOf(inner, ev.clientX, ev.clientY)
+    const dx = Math.round(at.col - start.col)
+    const dy = Math.round(at.row - start.row)
+    const next = { ...was }
+    if (!dir) {
+      next.x = Math.max(0, Math.min(cols - was.w, was.x + dx))
+      next.y = Math.max(0, Math.min(rows - was.h, was.y + dy))
+    } else {
+      if (dir.includes('e')) next.w = Math.max(minW, Math.min(cols - was.x, was.w + dx))
+      if (dir.includes('s')) next.h = Math.max(minH, Math.min(rows - was.y, was.h + dy))
+      if (dir.includes('w')) { const nx = Math.max(0, Math.min(was.x + was.w - minW, was.x + dx)); next.w = was.w + was.x - nx; next.x = nx }
+      if (dir.includes('n')) { const ny = Math.max(0, Math.min(was.y + was.h - minH, was.y + dy)); next.h = was.h + was.y - ny; next.y = ny }
+    }
+    if (next.x === box.x && next.y === box.y && next.w === box.w && next.h === box.h) return
+    const sized = next.w !== box.w || next.h !== box.h
+    box = next
+    place(node, box)
+    node.classList.toggle('bad', !isFree(box, tiles, x.id))
+    if (sized) { Object.assign(x, box); draw(node.firstChild, x, u) }
+  }
+  const up = () => {
+    removeEventListener('pointermove', move)
+    removeEventListener('pointerup', up)
+    removeEventListener('pointercancel', up)
+    node.classList.remove('moving')
+    if (isFree(box, tiles, x.id)) { Object.assign(x, box); commit(before, dir ? 'Resized' : (box.x !== was.x || box.y !== was.y ? 'Moved' : 'Saved')) }
+    else { Object.assign(x, was); say('Something is already there, so it went back.', true); render() }
+  }
+  addEventListener('pointermove', move)
+  addEventListener('pointerup', up)
+  addEventListener('pointercancel', up)
+}
+
+function addPiece(def, at) {
+  const tiles = layoutOf(current())
+  const w = Math.min(def.w, dims().cols)
+  const h = Math.min(def.h, dims().rows)
+  const box = at ? { x: Math.max(0, Math.min(dims().cols - w, at.x)), y: Math.max(0, Math.min(dims().rows - h, at.y)), w, h } : firstFree(w, h, tiles)
+  if (!box || !isFree(box, tiles)) return say(at ? 'Something is already there. Drop it on an empty spot.' : 'There\'s no room for that here. Make something smaller, or add a new view.', true)
+  const made = { id: uid(), type: def.type, ...box, opts: JSON.parse(JSON.stringify(def.opts)) }
+  change(() => { tiles.push(made); selected = made.id }, `Added ${def.name}`)
+}
+
+function renderPalette() {
+  const pieces = Object.entries(PIECES).map(([k, p]) => ({ name: p.name, about: p.about, type: p.as || k, w: p.w, h: p.h, opts: p.opts }))
+  const box = $('palette')
+  box.replaceChildren(el('div', 'group', 'Pieces'))
+  const addAll = (defs) => { for (const d of defs) {
+    const b = el('button', 'piece', el('b', '', d.name), el('span', '', d.about))
+    b.addEventListener('pointerdown', (e) => paletteDrag(e, d))
+    b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addPiece(d) } })
+    box.append(b)
+  } }
+  addAll(pieces)
+  box.append(el('div', 'group', 'Yours'))
+  if (state.mine.length) addAll(state.mine.map((m) => ({ ...m, about: m.about || 'Saved by you' })))
+  else box.append(el('p', 'hint', 'Set up a piece the way you like it, then choose Save as my piece to keep it here.'))
+}
+
+function paletteDrag(e, def) {
+  e.preventDefault()
+  const sx = e.clientX
+  const sy = e.clientY
+  let ghost = null
+  let drop = null
+  const inner = () => document.querySelector('.editing .inner')
+  const spot = (ev) => {
+    const at = cellOf(inner(), ev.clientX, ev.clientY)
+    return at.inside ? { x: Math.max(0, Math.min(dims().cols - Math.min(def.w, dims().cols), Math.round(at.col - def.w / 2))), y: Math.max(0, Math.min(dims().rows - Math.min(def.h, dims().rows), Math.round(at.row - def.h / 2))), w: Math.min(def.w, dims().cols), h: Math.min(def.h, dims().rows) } : null
+  }
+  const move = (ev) => {
+    if (!ghost && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return
+    if (!ghost) { ghost = el('div', 'ghost', def.name); document.body.append(ghost) }
+    ghost.style.left = `${ev.clientX + 10}px`
+    ghost.style.top = `${ev.clientY + 10}px`
+    const box = spot(ev)
+    if (drop) { drop.remove(); drop = null }
+    if (box) {
+      drop = el('div', isFree(box, layoutOf(current())) ? 'drop' : 'drop bad')
+      place(drop, box)
+      inner().append(drop)
+    }
+  }
+  const up = (ev) => {
+    removeEventListener('pointermove', move)
+    removeEventListener('pointerup', up)
+    if (ghost) ghost.remove()
+    if (drop) drop.remove()
+    if (!ghost) return addPiece(def)
+    const box = spot(ev)
+    if (box) addPiece(def, box)
+  }
+  addEventListener('pointermove', move)
+  addEventListener('pointerup', up)
+}
+
+function renderTabs() {
+  const box = $('tabs')
+  box.replaceChildren()
+  for (const v of state.views) {
+    const b = el('button', 'tab', v.name)
+    b.setAttribute('role', 'tab')
+    b.setAttribute('aria-selected', String(v.id === state.active))
+    b.addEventListener('click', () => { state.active = v.id; selected = null; localStorage.setItem(KEY, snap()); render() })
+    box.append(b)
+  }
+  const add = el('button', 'btn quiet', 'New view')
+  add.addEventListener('click', () => change(() => { const v = view(`View ${state.views.length + 1}`, []); state.views.push(v); state.active = v.id; selected = null }, 'Added a view'))
+  box.append(add)
+}
+
+function field(label, control) { return el('label', 'field', el('span', '', label), control) }
+function input(type, value, onChange) { const i = el('input'); i.type = type; i.value = value ?? ''; i.addEventListener('change', () => onChange(i.value)); return i }
+function select(value, options, onChange) { const s = el('select'); for (const [v, n] of options.map((o) => (Array.isArray(o) ? o : [o, o]))) { const opt = el('option', '', n); opt.value = v; s.append(opt) } s.value = value; s.addEventListener('change', () => onChange(s.value)); return s }
+function check(label, on, onChange) { const i = el('input'); i.type = 'checkbox'; i.checked = !!on; i.addEventListener('change', () => onChange(i.checked)); return el('label', 'check', i, label) }
+
+function renderPanel() {
+  const box = $('panel')
+  box.replaceChildren()
+  const v = current()
+  const x = layoutOf(v).find((n) => n.id === selected)
+  if (x) return tilePanel(box, x, v)
+  box.append(el('h2', '', 'This view'))
+  box.append(field('Name', input('text', v.name, (val) => change(() => { v.name = val.trim() || v.name }, 'Renamed'))))
+  box.append(check('Show at set times', !!v.when, (on) => change(() => { v.when = on ? { from: '07:00', to: '09:00' } : null })))
+  if (v.when) box.append(el('div', 'pair', field('From', input('time', v.when.from, (val) => change(() => { v.when.from = val }))), field('Until', input('time', v.when.to, (val) => change(() => { v.when.to = val })))))
+  const act = el('div', 'actions')
+  const dup = el('button', 'btn wide', 'Duplicate this view')
+  dup.addEventListener('click', () => change(() => { const c = JSON.parse(JSON.stringify(v)); c.id = uid(); c.name = `${v.name} copy`; for (const l of Object.values(c.layouts)) if (l) l.forEach((n) => { n.id = uid() }); state.views.splice(state.views.indexOf(v) + 1, 0, c); state.active = c.id }, 'Duplicated'))
+  const del = el('button', 'btn wide danger', 'Remove this view')
+  del.disabled = state.views.length < 2
+  del.addEventListener('click', () => change(() => { const n = state.views.indexOf(v); state.views.splice(n, 1); state.active = state.views[Math.max(0, n - 1)].id; selected = null }, 'Removed the view. Undo brings it back.'))
+  act.append(dup, del)
+  box.append(act, el('hr', 'rule'), el('h2', '', 'This screen'))
+  box.append(field('Which view shows', select(state.change.mode, [['schedule', 'By time of day'], ['rotate', 'Take turns'], ['fixed', 'Stay on one view']], (val) => change(() => { state.change.mode = val }))))
+  if (state.change.mode === 'rotate') box.append(field('Minutes on each view', input('number', state.change.minutes, (val) => change(() => { state.change.minutes = Math.max(1, Math.min(240, Number(val) || 5)) }))))
+  box.append(check('Show task titles', state.titles !== false, (on) => change(() => { state.titles = on }, on ? 'Titles are back on the screen' : 'Titles are hidden. The screen shows counts only')))
+  box.append(el('p', 'hint', 'Turn this off when guests are over. The screen switches to counts, and titles stop being sent to it.'))
+  const always = !state.hours
+  box.append(check('Keep the screen on all day', always, (on) => change(() => { state.hours = on ? null : { from: '06:00', to: '00:00' } })))
+  if (state.hours) {
+    box.append(el('div', 'pair', field('Active from', input('time', state.hours.from, (val) => change(() => { if (val) state.hours.from = val }))), field('Until', input('time', state.hours.to, (val) => change(() => { if (val) state.hours.to = val })))))
+    box.append(el('p', 'hint', 'Outside these hours the screen goes black and the TV is asked to sleep.'))
+  }
+  box.append(el('p', 'hint', { schedule: 'A view with set times shows during them. Otherwise the first view in the row shows.', rotate: 'Views with set times stay to their times. The rest take turns.', fixed: 'The view you have open stays up until you change it.' }[state.change.mode]))
+}
+
+function tilePanel(box, x, v) {
+  const o = x.opts
+  const set = (key) => (val) => change(() => { o[key] = val })
+  box.append(el('h2', '', (PIECES[x.type] || {}).name || x.type))
+  if (x.type === 'list' || x.type === 'due') box.append(field('Heading', input('text', o.label, set('label'))))
+  if (['list', 'sectors', 'top'].includes(x.type)) box.append(field('Section', select(o.section, SECTIONS, set('section'))))
+  if (x.type === 'list') box.append(field('Sector', select(o.sector, ['All', ...SECTORS], set('sector'))))
+  if (x.type === 'due') box.append(field('How far ahead, in days', input('number', o.days, (val) => set('days')(Math.max(1, Number(val) || 14)))))
+  if (x.type === 'note') { const a = el('textarea'); a.value = o.text; a.addEventListener('change', () => set('text')(a.value)); box.append(field('Text', a)) }
+  if (x.type === 'counts') for (const s of SECTIONS) box.append(check(s, (o.sections || []).includes(s), (on) => change(() => { o.sections = SECTIONS.filter((n) => (n === s ? on : o.sections.includes(n))) })))
+  if ('size' in o) box.append(field('Text size', select(o.size, [['S', 'Small'], ['M', 'Medium'], ['L', 'Large'], ['XL', 'Largest']], set('size'))))
+  if ('rank' in o) box.append(check('Show numbers', o.rank, set('rank')))
+  if ('due' in o) box.append(check('Show dates', o.due, set('due')))
+  if ('skipTop' in o) box.append(check('Leave out the top task', o.skipTop, set('skipTop')))
+  if ('date' in o) box.append(check('Show the date', o.date, set('date')))
+  const act = el('div', 'actions')
+  const mine = el('button', 'btn wide', 'Save as my piece')
+  mine.addEventListener('click', () => {
+    const base = o.label || (o.sector && o.sector !== 'All' ? o.sector : '') || (PIECES[x.type] || {}).name
+    change(() => state.mine.push({ name: `My ${base}`, about: `${x.w} by ${x.h}`, type: x.type, w: x.w, h: x.h, opts: JSON.parse(JSON.stringify(o)) }), 'Saved to your pieces')
+  })
+  const dup = el('button', 'btn wide', 'Duplicate')
+  dup.addEventListener('click', () => addPiece({ name: 'a copy', type: x.type, w: x.w, h: x.h, opts: o }))
+  const del = el('button', 'btn wide danger', 'Remove')
+  del.addEventListener('click', () => change(() => { const l = layoutOf(v); l.splice(l.indexOf(x), 1); selected = null }, 'Removed. Undo brings it back.'))
+  act.append(mine, dup, del)
+  box.append(act)
+}
+
+function render() {
+  $('screen').value = state.screen
+  $('undo').disabled = !past.length
+  $('redo').disabled = !future.length
+  renderPalette()
+  renderTabs()
+  renderCanvas()
+  renderPanel()
+}
+
+// ---------- Preview: exactly what the TV would draw ----------
+let previewing = null
+function openPreview(n = state.views.indexOf(current())) {
+  closePreview()
+  const v = state.views[n]
+  const { stage, inner, u } = makeStage(innerWidth, innerHeight, state.screen)
+  previewing = el('div', 'preview', el('div', 'tip', `${v.name} · arrow keys change view · Esc to go back`), stage)
+  previewing.dataset.n = n
+  document.body.append(previewing)
+  for (const x of layoutOf(v)) {
+    const node = el('div', 'tile', el('div', 'body'))
+    place(node, x)
+    inner.append(node)
+    draw(node.firstChild, x, u)
+  }
+  setTimeout(() => { if (previewing) previewing.firstChild.style.display = 'none' }, 3000)
+}
+function closePreview() { if (previewing) { previewing.remove(); previewing = null } }
+
+$('play').addEventListener('click', () => openPreview())
+$('undo').addEventListener('click', () => step(past, future, 'Undone'))
+$('redo').addEventListener('click', () => step(future, past, 'Redone'))
+$('screen').addEventListener('change', (e) => { state.screen = e.target.value; selected = null; localStorage.setItem(KEY, snap()); render() })
+$('reset').addEventListener('click', () => { const before = snap(); state = starter(); selected = null; commit(before, 'Back to the starter views. Undo brings yours back.') })
+
+addEventListener('keydown', (e) => {
+  if (previewing) {
+    const n = Number(previewing.dataset.n)
+    if (e.key === 'Escape') closePreview()
+    else if (e.key === 'ArrowRight') openPreview((n + 1) % state.views.length)
+    else if (e.key === 'ArrowLeft') openPreview((n - 1 + state.views.length) % state.views.length)
+    return
+  }
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)
+  if (typing) return
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? step(future, past, 'Redone') : step(past, future, 'Undone') }
+  const tiles = layoutOf(current())
+  const x = tiles.find((n) => n.id === selected)
+  if (!x) return
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return change(() => { tiles.splice(tiles.indexOf(x), 1); selected = null }, 'Removed. Undo brings it back.') }
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]
+  if (!d) return
+  e.preventDefault()
+  const [minW, minH] = MIN[x.type] || [2, 1]
+  const box = e.shiftKey ? { x: x.x, y: x.y, w: Math.max(minW, x.w + d[0]), h: Math.max(minH, x.h + d[1]) } : { x: x.x + d[0], y: x.y + d[1], w: x.w, h: x.h }
+  if (isFree(box, tiles, x.id)) change(() => Object.assign(x, box), e.shiftKey ? 'Resized' : 'Moved')
+  else say('Something is in the way.', true)
+})
+addEventListener('resize', () => { if (previewing) openPreview(Number(previewing.dataset.n)); else renderCanvas() })
+render()
+</script>
+</body>
+</html>
