@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.1
 - **Fewer calls to connected services.** ClickUp's connector allows 100 calls a day, and syncing every 15 minutes used most of them. Connected services are now read at set times (`reread_times`), plus the morning and nightly runs, and a ClickUp read takes two calls.
 - **A first wall display.** `theseus wall setup <host>` puts your list on a TV or monitor from a Raspberry Pi, grouped by category, with no Claude. Your Mac sends only what the screen's views use, and never messages, email or your Today note. Task titles stay off until you choose, and `theseus wall hours 6am 12am` sets when the screen is on. It hasn't run on a real Pi yet.
 - **The iMessage channel can only answer in your own self-chat.** The send guard now checks where each reply is going, and refuses anything else even if the plugin's allowlist would permit it.
 - **Runs clear their scratch files.** Hidden temporary exports, like a copy of your Reminders, are removed when a run ends.
 - **Release builds are harder to tamper with.** GitHub Actions are pinned to exact commits, the signing secrets reach only the step that needs them, and the write token isn't left where an install script could use it.
+- **The manifesto names every way your data leaves your Mac:** Claude Code, the connectors you turn on, Apple's own sync, and a wall display if you connect one. Theseus has also moved to github.com/ExtantApe/theseus; old links redirect.
 
 ## 0.6.0
 - **Unattended runs have firmer limits.** Texts, email and web pages are treated as data, never instructions. Runs nobody is watching can't search the web or change your settings, and no session can read your SSH, cloud or signing keys, or your Claude login.
