@@ -7,6 +7,7 @@
       "Bash(python3 engine/tools/alarms.py:*)",
       "Bash(python3 engine/tools/things_export.py:*)",
       "Bash(python3 engine/tools/schedule.py:*)",
+      "Bash(python3 engine/tools/rereads.py:*)",
       "Bash(python3 engine/tools/app_edits.py:*)",
       "Bash(bin/ek:*)",
       "Bash(ariadne count:*)",
