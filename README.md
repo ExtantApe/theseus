@@ -204,7 +204,7 @@ Either way, Theseus never posts to Slack.
 ---
 
 ## Privacy and safety
-- **Your data stays in your workspace** (`~/Theseus`): profile, config, list, drafts, exports. The engine (this repo) holds no personal data, and updates never touch your files. The one thing that leaves is optional: if you connect a wall display, the parts of your list its views show go to your own Pi over SSH, where they stay in memory. Messages, email and your Today note never do.
+- **Your data stays in your workspace** (`~/Theseus`): profile, config, list, drafts, exports. The engine (this repo) holds no personal data, and updates never touch your files. What leaves, and where it goes, is listed in the manifesto: Claude Code, the connectors you turn on, Apple's own sync, and an optional wall display. If you connect a wall display, the parts of your list its views show go to your own Pi over SSH, where they stay in memory. Messages, email and your Today note never go to the Pi.
 - Messages, Mail, Contacts and Things are read **read-only from snapshots**. A hook on every connector (`engine/tools/send_guard.py`) refuses anything that sends, in every session, and unattended runs can only read connectors and make the specific updates a sync needs. Deleting needs you. Every change Theseus makes is logged.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
