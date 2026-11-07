@@ -975,6 +975,78 @@ echo "$last" > "{self.ws}/remote"; cat > "{self.ws}/kit.tgz"; exit "${{FAKE_SETU
             with self.assertRaises(self.wall.WallError):
                 self.snap()
 
+    def cli(self, *args, stdin=""):
+        env = {**os.environ, "THESEUS_HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "cli.py"), "wall", *args], capture_output=True, text=True, env=env, input=stdin, timeout=60)
+
+    def test_the_commands_as_you_would_run_them(self):
+        self.config["wall"] = {"titles": True}
+        self.save_config()
+        status = self.cli("status")
+        self.assertEqual(status.returncode, 0)
+        self.assertIn("is off", status.stdout)
+        self.assertEqual(self.cli().stdout, status.stdout, "plain `theseus wall` is status")
+        shown = json.loads(self.cli("show").stdout)
+        self.assertEqual(shown["sections"]["now"]["items"][0]["title"], "Renew the license")
+        self.assertEqual(self.cli("push").returncode, 0, "nothing to do while it's off")
+        self.assertFalse((self.ws / "data/wall-state.json").exists())
+        for args in (["nope"], ["titles"], ["titles", "maybe"], ["hours"], ["push", "now"], ["show", "x"]):
+            bad = self.cli(*args)
+            self.assertNotEqual(bad.returncode, 0, args)
+            self.assertIn("Usage", bad.stderr, args)
+        self.assertIn("Usage", self.cli("hours", "6am").stderr)
+        self.assertEqual(self.cli("titles", "off").returncode, 0)
+        self.assertEqual(json.loads((self.ws / "config.json").read_text())["wall"]["titles"], False)
+        self.assertEqual(self.cli("hours", "6am", "12am").returncode, 0)
+        self.assertEqual(json.loads((self.ws / "data/wall-views.json").read_text())["active_hours"], {"from": "06:00", "to": "00:00"})
+        self.assertEqual(json.loads(self.cli("show").stdout)["display"], {"on": "06:00", "off": "00:00"})
+        (self.ws / "config.json").write_text("{broken")
+        broken = self.cli("show")
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn("config.json", broken.stderr)
+        self.assertNotIn("Traceback", broken.stderr)
+
+    def test_a_change_the_screen_did_not_get_is_not_claimed(self):
+        self.fake_ssh('#!/bin/bash\necho "connect: No route to host" >&2\nexit 255\n')
+        for args in (["titles", "off"], ["hours", "6am", "8pm"], ["view", "board"]):
+            out = self.cli_with_fake(*args)
+            self.assertEqual(out.returncode, 0, args)
+            self.assertIn("didn't get", out.stdout + out.stderr, args)
+        (self.ws / "data/wall-views.json").unlink()
+
+    def cli_with_fake(self, *args):
+        env = {**os.environ, "THESEUS_HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "cli.py"), "wall", *args], capture_output=True, text=True, env=env, timeout=60)
+
+    def test_the_background_job_is_a_valid_launch_agent(self):
+        if not shutil.which("plutil"):
+            self.skipTest("macOS only")
+        home = self.ws / "home"
+        home.mkdir()
+        old = os.environ["HOME"]
+        os.environ["HOME"] = str(home)
+        self.addCleanup(os.environ.__setitem__, "HOME", old)
+        self.fake_ssh()
+        fake = self.ws / "fakebin/launchctl"
+        fake.write_text(f'#!/bin/bash\necho "$@" >> "{self.ws}/launchctl"\n')
+        fake.chmod(0o755)
+        self.wall.install_agent(self.ws)
+        plist = home / "Library/LaunchAgents/com.theseus.wall.plist"
+        self.assertEqual(subprocess.run(["plutil", "-lint", str(plist)], capture_output=True).returncode, 0)
+        import plistlib
+        job = plistlib.loads(plist.read_bytes())
+        self.assertEqual(job["ProgramArguments"][1], str(TOOLS / "wall.py"))
+        self.assertEqual(job["EnvironmentVariables"], {"THESEUS_HOME": str(self.ws)})
+        self.assertEqual(job["StartInterval"], 30)
+        self.assertEqual(job["StandardOutPath"], "/dev/null", "nothing about your list goes in a log")
+
+    def test_a_host_identity_change_is_explained_and_never_accepted(self):
+        self.fake_ssh('#!/bin/bash\necho "@@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@@" >&2\necho "Host key verification failed." >&2\nexit 255\n')
+        self.assertFalse(self.wall.push(self.ws))
+        said = json.loads((self.ws / "data/wall-state.json").read_text())["last_error"]
+        self.assertIn("identity", said.lower())
+        self.assertIn("ssh-keygen -R", said)
+
     def test_the_key_stays_out_of_reach(self):
         self.assertIn("Read(.wall/**)", json.loads((ROOT / "engine/templates/settings.json").read_text())["permissions"]["deny"])
 
@@ -1046,6 +1118,31 @@ class WallReceive(unittest.TestCase):
         (self.run_dir / "wall.json").write_text(json.dumps({"display": None}))
         power.main(at(1))
         self.assertEqual(told, ["on", "off", "on"], "always on leaves the TV alone")
+
+    def test_the_hdmi_commands_are_the_ones_in_the_manual(self):
+        import importlib.util
+        from unittest import mock
+        spec = importlib.util.spec_from_file_location("wall_power2", ROOT / "apps/wall/pi/power.py")
+        power = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(power)
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0", "/dev/cec1"]), mock.patch.object(power.subprocess, "run") as run:
+            power.tell_tv("off")
+        self.assertEqual([c.args[0] for c in run.call_args_list], [["cec-ctl", "-d", d, *a] for d in ("/dev/cec0", "/dev/cec1") for a in (["--playback"], ["--to", "0", "--standby"])])
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0"]), mock.patch.object(power.subprocess, "run") as run:
+            power.tell_tv("on")
+        self.assertEqual(run.call_args_list[-1].args[0], ["cec-ctl", "-d", "/dev/cec0", "--to", "0", "--image-view-on"])
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0"]), mock.patch.object(power.subprocess, "run", side_effect=OSError("no cec-ctl")):
+            power.tell_tv("on")   # a Pi without it just stays black
+        (self.run_dir / "wall.json").write_text("half a fi")
+        power.RUN = self.run_dir
+        power.main(dt.datetime(2026, 11, 5, 12))   # a damaged snapshot does nothing
+
+    def test_the_screen_waits_for_its_page(self):
+        source = (ROOT / "apps/wall/pi/install.sh").read_text()
+        self.assertIn("ExecStartPre=", source, "a browser that starts first shows an error page forever")
+        self.assertRegex(source, r"apt-get install[^\n]*\bxwayland\b", "cage won't start without it")
+        self.assertIn("restart --no-block theseus-wall-screen.service", source, "a slow browser must not fail the whole install; the service retries by itself")
+        self.assertIn("AccuracySec=1s", source, "or systemd may run the once-a-minute job up to a minute late")
 
     def test_the_page_can_only_talk_to_this_pi(self):
         serve = (ROOT / "apps/wall/pi/serve.py").read_text()

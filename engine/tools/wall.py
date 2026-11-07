@@ -296,7 +296,8 @@ def push(ws, force=False):
         return True
     try:
         run = subprocess.run(ssh_base(ws) + [f"wall@{wall['host']}", "receive"], input=json.dumps(snap, ensure_ascii=False).encode(), capture_output=True, timeout=30)
-        error = None if run.returncode == 0 else (run.stderr.decode(errors="replace").strip().splitlines() or ["ssh failed"])[-1]
+        said = run.stderr.decode(errors="replace").strip()
+        error = None if run.returncode == 0 else identity_changed(ws, wall["host"]) if changed_identity(said) else (said.splitlines() or ["ssh failed"])[-1]
     except (OSError, subprocess.TimeoutExpired) as e:
         error = str(e)
     if error:
@@ -304,6 +305,22 @@ def push(ws, force=False):
         return False
     write_json(state_path(ws), {"fingerprint": stamp, "last_sent": now, "last_try": now})
     return True
+
+
+def changed_identity(said):
+    return "IDENTIFICATION HAS CHANGED" in said or "Host key verification failed" in said
+
+
+def identity_changed(ws, host):
+    """It might be a Pi you reinstalled, or something else at that address. Only you can know, so it's never accepted automatically."""
+    return (f"The device at {host} has a different identity from the Pi you set up, so nothing was sent. If you reinstalled the Pi, accept the new identity with: "
+            f"ssh-keygen -R {host} -f {keys_dir(ws) / 'known_hosts'} and then run: theseus wall setup {host}")
+
+
+def deliver_or_say(ws):
+    """A setting is saved either way, but it doesn't claim to be on the screen until it is."""
+    if not push(ws):
+        print(f"Saved, but the screen didn't get it yet: {read_json(state_path(ws), {}).get('last_error')}. It'll keep trying by itself.")
 
 
 def agent_path():
@@ -381,12 +398,18 @@ def setup(ws, args):
     # Your own login, which has to work without a password. The key made above can only ever deliver a snapshot.
     remote = f'd=$(mktemp -d) && tar -xz -C "$d" && sudo bash "$d/pi/install.sh" {shlex.quote(public)} {shlex.quote(time_zone() or "")}; rc=$?; rm -rf "$d"; exit $rc'
     ssh = [shutil.which("ssh") or "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", f"UserKnownHostsFile={keys / 'known_hosts'}", "-o", "StrictHostKeyChecking=accept-new", f"{user}@{host}", remote]
-    tar = subprocess.Popen(["tar", "-C", str(files), "-czf", "-", "display", "pi"], stdout=subprocess.PIPE, env={**os.environ, "COPYFILE_DISABLE": "1"})
-    run = subprocess.run(ssh, stdin=tar.stdout)
+    # macOS adds its own file details to an archive, and Linux tar complains about each one.
+    tar = subprocess.Popen(["tar", "--no-xattrs", "-C", str(files), "-czf", "-", "display", "pi"], stdout=subprocess.PIPE, env={**os.environ, "COPYFILE_DISABLE": "1"})
+    run = subprocess.run(ssh, stdin=tar.stdout, stderr=subprocess.PIPE)
     tar.stdout.close()
     tar.wait()
+    said = run.stderr.decode(errors="replace").strip()
     if run.returncode != 0:
-        fail(f"Setup didn't finish on {host}, so nothing was turned on. Check that this works without a password, then try again: ssh {user}@{host}")
+        if changed_identity(said):
+            fail(identity_changed(ws, host))
+        if run.returncode == 255:  # ssh's own code: it never got as far as running anything
+            fail(f"I couldn't log in to {host}, so nothing was turned on. Check that this works without a password, then try again: ssh {user}@{host}\n{said}")
+        fail(f"The install stopped on {host}, so nothing was turned on. It's safe to run setup again. What it said:\n{said}")
 
     titles = (load_config(ws).get("wall") or {}).get("titles")
     set_wall(ws, enabled=True, host=host, titles=ask_who_can_see() if titles is None else titles)
@@ -428,7 +451,7 @@ def set_hours(ws, args):
         said = f"The screen is on from {times[0]} to {times[1]}, and asleep the rest of the time."
     write_json(ws / "data/wall-views.json", data)
     print(said)
-    push(ws)
+    deliver_or_say(ws)
 
 
 def time_zone():
@@ -446,7 +469,7 @@ def set_view(ws, args):
     data["change"] = {**(data.get("change") or {}), "mode": "fixed", "active": names[name.lower()]}
     write_json(ws / "data/wall-views.json", data)
     print(f"The screen will show {names[name.lower()]}.")
-    push(ws)
+    deliver_or_say(ws)
 
 
 def status(ws):
@@ -497,7 +520,7 @@ def main(args=None):
         elif command == "titles" and rest in (["on"], ["off"]):
             set_wall(ws, titles=rest == ["on"])
             print("Task titles are " + rest[0] + " for this screen.")
-            push(ws)
+            deliver_or_say(ws)
         elif command == "view" and rest:
             set_view(ws, rest)
         elif command == "hours" and rest:

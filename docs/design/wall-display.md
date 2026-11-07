@@ -11,10 +11,10 @@
 
 | Part | State |
 |---|---|
-| `theseus wall` on the Mac, the filter, delivery, the background job | Built and tested, with the Pi's real `receive.py` standing in for the Pi |
+| `theseus wall` on the Mac, the filter, delivery, the background job | Built, and tested against a simulated Pi. See [how it's tested](#how-its-tested) |
 | The screen (`apps/wall/display`) | Built and tested in Chromium and WebKit, in landscape and portrait, from 720p to 4K |
 | Active hours | Built: `theseus wall hours 6am 12am`. The page goes black outside them, and the TV is asked to sleep. **TV sleep hasn't been tried on a real TV** |
-| The Pi kit (`apps/wall/pi`) | `receive.py`, `serve.py` and `power.py` are tested. **`install.sh` has never run on a Pi** |
+| The Pi kit (`apps/wall/pi`) | Built, and installs on simulated Debian bookworm and trixie. **It has never run on a real Pi** |
 | The builder page in the Mac app | Not built. Views can be edited by hand in `data/wall-views.json`, and `theseus wall view <name>` switches between them |
 | App-hosted delivery and finding a Pi on the network | Not built. Delivery runs from a launch agent, and setup takes a host name |
 
@@ -237,6 +237,24 @@ apps/desktop/src/Wall.tsx     later: the builder page, on the app's Setup tab un
 
 `install.sh` copies `apps/wall/display` and `apps/wall/pi` to `wall/` in your workspace, so `theseus wall setup` can hand them to a Pi. One renderer means the builder's picture and the TV's picture can't drift apart.
 
+## How it's tested
+
+| Command | What it covers | What's real, and what isn't |
+|---|---|---|
+| `python3 tests/test_engine.py` | The filter's promises, the commands, the settings, the launch agent file | Real code, with a stand-in for `ssh` and for HDMI commands |
+| `node apps/wall/e2e.mjs` | Every view at four sizes, every state, active hours, a whole night on an open page with a fast-forwarded clock, hostile titles | Real browsers and the real `serve.py`. The snapshots are written directly |
+| `python3 apps/wall/sim/test_connection.py` | First connect, updates, the Pi hung or off, a reboot, bad data, a changed identity, active hours, the kiosk, turning it off. On a Mac, also the real launchd job | The Mac-side code, `ssh`, a real TCP connection, an SSH server, Linux users, `sudo`, the real `install.sh` and packages, systemd, Chromium and cage are all real. **Docker stands in for the Pi, a headless output for HDMI, and a recording script for `cec-ctl`** |
+
+### What only a real Pi and TV can show
+
+- Whether Chromium and cage work on a Pi's GPU and HDMI output, at your TV's resolution, and whether the page fills the screen. On simulated trixie it does. On simulated bookworm, whose older cage is confused by a headless output, the page filled only a corner, so bookworm is unproven.
+- Whether your TV obeys the sleep and wake commands. Only the commands sent have been checked, against the `cec-ctl` manual.
+- Whether the text is readable from where you sit, and how the screen looks in your room.
+- Whether a Pi 4 or 5 keeps up. All testing ran on an Apple silicon Mac.
+- Wi-Fi drops, `.local` names on your network, and real power cuts. A stopped, paused and restarted container is the nearest thing tested.
+- Differences between Pi OS and plain Debian, and Raspberry Pi Imager's setup, which the simulated image only imitates.
+- The Mac asleep for real. It's simulated by moving the screen's clock forward and by delivery stopping.
+
 ## Build order
 
 | Phase | Scope | Done when |
@@ -249,7 +267,7 @@ apps/desktop/src/Wall.tsx     later: the builder page, on the app's Setup tab un
 
 ## Known risks
 
-- **The Pi installer is unproven.** Package names and the kiosk service follow current Pi OS as far as is known, but they've never run on a real Pi.
+- **The Pi installer hasn't met a real Pi.** It runs on simulated Debian bookworm and trixie, which already caught bugs that would have blanked the screen, but Pi OS and real graphics may still differ.
 - **TV sleep varies.** HDMI-CEC support differs by TV, and some need it turned on in their settings. If it does nothing, the screen is still black.
 - **macOS Local Network permission.** macOS 15 and later restrict apps reaching devices on your network, and the app's `Info.plist` has no `NSLocalNetworkUsageDescription` yet. It'll need one when delivery moves into the app. A one-off check on macOS 15 found a launch agent could reach a local device with `ssh`, so the current background job should work, and `theseus wall status` will say if it doesn't.
 - **Less to manage, never more (manifesto 2).** Drag-and-drop views are a new thing to fiddle with. The starter views have to be good enough that the builder stays optional, and the week of use is the real test.

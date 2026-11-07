@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Hands the screen its page and the latest snapshot, on this Pi only. It serves these four paths and nothing else."""
+"""Hands the screen its page and the latest snapshot, on this Pi only. It serves these four paths and nothing else. With --wait, it waits until the server is answering."""
 import http.server
 import os
+import socket
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(os.environ.get("THESEUS_WALL_DISPLAY", Path(__file__).resolve().parents[1] / "display"))
@@ -38,7 +40,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass  # nothing about your list goes in a log
 
 
+def wait(seconds=60):
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            socket.create_connection(("127.0.0.1", PORT), 1).close()
+            return 0
+        except OSError:
+            time.sleep(0.5)
+    return 1
+
+
 def main():
+    if "--wait" in sys.argv:
+        return wait()
     http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
 
 

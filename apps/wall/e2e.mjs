@@ -97,6 +97,7 @@ try {
   await open(snapshot(), { now: '2026-11-06T08:42:00' })
   check("yesterday's Due today has moved on", (await page.textContent('#inner')).includes('Was due Thu'))
   check('an old list says so', (await page.textContent('.stale-note')).includes('This list is from 24 hours ago'))
+  check('and the status line stops saying it\'s up to date', !(await page.textContent('#inner')).includes('Up to date') && (await page.textContent('#inner')).includes('Last update'))
   await shot('stale')
 
   await open(snapshot(), { now: `${NOW.slice(0, 11)}08:50:00` })
@@ -129,6 +130,12 @@ try {
   await open(hostile)
   check('titles stay text', await page.evaluate(() => !window.__pwned && !document.querySelector('#inner img, #inner script, #inner b[onmouseover], #inner i:not(.label i)')))
 
+  const few = snapshot()
+  few.sections.now.items = few.sections.now.items.slice(0, 3).map((i) => ({ ...i, category: 'Home' }))
+  few.sections.now.open = 3
+  await open(few)
+  check('a short list gets wide cards, with nothing cut off', await page.evaluate(() => [...document.querySelectorAll('.sector .t')].every((t) => t.scrollHeight <= t.clientHeight + 1) && document.querySelector('.sector').getBoundingClientRect().width > innerWidth * 0.5))
+
   const empty = snapshot()
   empty.sections.now = { title: 'Now', open: 0, more: 0, kept_private: 0, items: [] }
   await open(empty)
@@ -151,6 +158,50 @@ try {
   check('a timed view shows during its time', (await page.locator('[data-type=list]').count()) === 1)
   await open(snapshot({ change: { mode: 'schedule' }, views: [{ ...views[1], when: { from: '22:00', to: '07:00' } }, views[0]] }))
   check('and not outside it', (await page.locator('[data-type=sectors]').count()) === 1)
+
+  // A whole night on one open page, with the clock fast-forwarded: nothing reloads, and no new delivery arrives.
+  const night = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
+  await night.clock.install({ time: new Date('2026-11-05T23:50:00') })
+  put(snapshot({ generated_at: '2026-11-05T23:49:00', display: { on: '06:00', off: '00:00' } }))
+  await night.goto(base)
+  await night.clock.runFor(11000)
+  await night.waitForSelector('.tile')
+  const dark = () => night.evaluate(() => document.getElementById('stage').classList.contains('dark'))
+  check('an open page is on at 11:50pm', !(await dark()))
+  check('with Due today for today', (await night.textContent('#inner')).includes('Was due Tue'))
+  await night.clock.fastForward('11:00')
+  await night.clock.runFor(11000)
+  check('it goes dark at midnight by itself', await dark())
+  check('with nothing on screen', (await night.locator('#inner > *').count()) === 0)
+  await night.clock.fastForward('05:50:00')
+  await night.clock.runFor(11000)
+  check('it stays dark through the night', await dark())
+  await night.clock.fastForward('10:00')
+  await night.clock.runFor(11000)
+  check('it comes back at 6am by itself', !(await dark()))
+  const morning = await night.textContent('#inner')
+  check('and the list is back, with its age shown', morning.includes('Renew the business license') && morning.includes('This list is from 6 hours ago'), morning.slice(-90))
+  check('yesterday\'s Due today has moved on', morning.includes('Was due Thu'))
+  check('the clock on screen moved', (await night.textContent('.clock')).includes('6:'))
+  const after = snapshot({ generated_at: '2026-11-06T06:01:00', display: { on: '06:00', off: '00:00' } })
+  after.sections.now.items[0].title = 'Fresh from the Mac'
+  put(after)
+  await night.clock.runFor(11000)
+  await night.waitForFunction(() => document.querySelector('.top .tt')?.textContent === 'Fresh from the Mac', null, { timeout: 8000 })
+  check('when the Mac wakes, the morning delivery shows and the age note goes', (await night.locator('.stale-note').count()) === 0)
+  rmSync(join(run, 'wall.json'))
+  await night.clock.runFor(11000)
+  await night.waitForFunction(() => document.getElementById('inner').textContent.includes('Waiting for your Mac'), null, { timeout: 8000 })
+  check('a list cleared while the page is open goes back to Waiting', true)
+  await night.close()
+
+  // The server going away while the page is open: the last list stays up.
+  put(snapshot())
+  await open(snapshot())
+  await page.route('**/wall.json*', (r) => r.abort())
+  await page.waitForTimeout(11000)
+  check('if the page server stops answering, the last list stays up', (await page.textContent('#inner')).includes('Renew the business license'))
+  await page.unroute('**/wall.json*')
 
   // A fresh delivery appears by itself.
   await open(snapshot())

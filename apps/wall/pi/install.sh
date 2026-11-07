@@ -15,12 +15,13 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 BROWSER=chromium
 apt-cache show chromium >/dev/null 2>&1 || BROWSER=chromium-browser
-apt-get install -y -qq --no-install-recommends cage "$BROWSER" fonts-inter python3 unattended-upgrades v4l-utils >/dev/null
+apt-get install -y -qq --no-install-recommends cage xwayland "$BROWSER" fonts-inter python3 unattended-upgrades v4l-utils >/dev/null   # cage won't start without xwayland
 BROWSER_BIN="$(command -v chromium || command -v chromium-browser)"
 
 echo "== Users"
 id wall >/dev/null 2>&1 || useradd --system --create-home --shell /bin/sh wall     # delivers snapshots, and nothing else
 id kiosk >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin kiosk   # draws the screen
+for group in video render input; do getent group "$group" >/dev/null || groupadd --system "$group"; done   # Pi OS has these, but not every image does
 usermod -aG video,render,input kiosk
 
 echo "== Files"
@@ -40,7 +41,7 @@ chown wall:wall /home/wall/.ssh/authorized_keys && chmod 600 /home/wall/.ssh/aut
 
 echo "== Keeping it hands-off"
 # Active hours and "Due today" both go by this Pi's clock.
-if [[ "$ZONE" =~ ^[A-Za-z0-9_+/-]+$ && -e "/usr/share/zoneinfo/$ZONE" ]]; then timedatectl set-timezone "$ZONE"; fi
+if [[ "$ZONE" =~ ^[A-Za-z0-9_+/-]+$ && -e "/usr/share/zoneinfo/$ZONE" ]]; then timedatectl set-timezone "$ZONE" || echo "Couldn't set the time zone, so check it with: timedatectl"; fi
 usermod -aG video wall   # to reach the TV over HDMI
 # The Mac only got this far with a key, so passwords can go.
 mkdir -p /etc/ssh/sshd_config.d
@@ -73,6 +74,7 @@ cat > /etc/systemd/system/theseus-wall-screen.service <<EOF
 Description=Theseus wall: the screen
 After=theseus-wall-web.service systemd-user-sessions.service
 Wants=theseus-wall-web.service
+Requires=theseus-wall-web.service
 Conflicts=getty@tty1.service
 After=getty@tty1.service
 
@@ -86,6 +88,8 @@ StandardInput=tty
 RuntimeDirectory=theseus-wall-kiosk
 Environment=XDG_RUNTIME_DIR=/run/theseus-wall-kiosk
 Environment=XDG_SESSION_TYPE=wayland
+# A browser that starts before its page is ready shows an error, and nothing ever reloads it.
+ExecStartPre=/usr/bin/python3 $APP/pi/serve.py --wait
 ExecStart=/usr/bin/cage -s -- $BROWSER_BIN --kiosk --incognito --no-first-run --noerrdialogs --disable-infobars --disable-translate --disable-sync --disable-extensions --disable-background-networking --ozone-platform=wayland --check-for-update-interval=31536000 http://127.0.0.1:8737/
 Restart=always
 RestartSec=5
@@ -111,6 +115,7 @@ Description=Theseus wall: check active hours once a minute
 
 [Timer]
 OnCalendar=minutely
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
@@ -121,5 +126,8 @@ systemctl enable theseus-wall-web.service theseus-wall-screen.service >/dev/null
 systemctl enable --now theseus-wall-power.timer >/dev/null
 systemctl restart theseus-wall-web.service
 systemctl disable --now getty@tty1.service 2>/dev/null || true
-systemctl restart theseus-wall-screen.service
+# Everything else is ready by now, and the screen retries by itself, so a slow first start doesn't fail the install.
+systemctl restart --no-block theseus-wall-screen.service
+sleep 8
+systemctl is-active --quiet theseus-wall-screen.service || echo "The screen hasn't started yet, and it will keep trying. To see why: journalctl -u theseus-wall-screen.service"
 echo "== Done"

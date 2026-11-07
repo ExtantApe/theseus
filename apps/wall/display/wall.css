@@ -44,6 +44,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); c
 .note { white-space: pre-wrap; line-height: 1.25; overflow: hidden; }
 .status { height: 100%; display: flex; align-items: center; gap: .6em; color: var(--mute); font-size: calc(2.4 * var(--u)); white-space: nowrap; overflow: hidden; }
 .status .dot { width: .55em; height: .55em; border-radius: 50%; background: var(--teal); flex: none; }
+.status .dot.away { background: var(--amber); }
 
 /* Drawn by the screen itself, so no layout can leave them out */
 .stale-note { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: calc(1.3 * var(--u)); padding: calc(1.3 * var(--u)) calc(2.4 * var(--u)); border-radius: calc(1 * var(--u)); background: #3a2a18; border: 1px solid #e7a06655; color: #f4d3b3; font-size: calc(2.9 * var(--u)); }

@@ -153,6 +153,7 @@ function drawSectors(body, snap, o, u) {
   const all = [...groups]
   const box = el('div', 'sectors')
   const most = Math.max(1, Math.floor(body.clientWidth / (34 * u)))
+  const fewest = Math.min(most, all.length, 3)
   body.append(box)
   const card = ([name, tasks], cap) => {
     const c = el('section', 'sector', el('div', 'label', name, el('i', '', String(tasks.length))), rowsFor(tasks.slice(0, cap), o, u))
@@ -161,10 +162,10 @@ function drawSectors(body, snap, o, u) {
   }
   const fits = () => box.scrollWidth <= box.clientWidth + 1 && box.scrollHeight <= box.clientHeight + 1
   // Everything fits if it can. If not, each sector gives up its lowest-ranked tasks evenly, and the lowest-ranked sectors go last of all.
-  // Narrower columns wrap more, so the column count that shows the most tasks wins.
   const tallest = Math.max(1, ...all.map((g) => g[1].length))
   let best = { cap: 0, columns: most }
-  for (let columns = most; columns >= Math.max(1, most - 2); columns--) {
+  // Wider cards read better, so the fewest columns that show everything win.
+  for (let columns = fewest; columns <= most && best.cap < tallest; columns++) {
     box.style.columns = String(columns)
     for (let cap = tallest; cap > best.cap; cap--) {
       box.replaceChildren(...all.map((g) => card(g, cap)))
@@ -203,8 +204,9 @@ function drawCounts(body, snap, o, u) {
 }
 function drawStatus(body, snap) {
   const [t, ampm] = clockParts(new Date(snap.generated_at))
+  const stale = (now() - new Date(snap.generated_at)) / 60000 > STALE_MINUTES
   const kept = Object.values(snap.sections).reduce((n, s) => n + (s.kept_private || 0), 0)
-  const parts = [el('span', 'dot'), `Up to date · ${t} ${ampm}`]
+  const parts = [el('span', stale ? 'dot away' : 'dot'), stale ? `Last update ${t} ${ampm}` : `Up to date · ${t} ${ampm}`]
   if (kept) parts.push(` · ${kept} kept private`)
   body.append(el('div', 'status', ...parts))
 }

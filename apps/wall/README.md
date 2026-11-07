@@ -2,7 +2,7 @@
 
 Your list on a TV or monitor, from a Raspberry Pi. Your Mac sends the Pi a filtered snapshot, and the Pi draws it. No Claude is involved.
 
-**This hasn't run on a real Pi yet.** The screen and the delivery path are tested, but `pi/install.sh` isn't.
+**This hasn't run on a real Pi or TV yet.** It's tested against a simulated Pi in Docker, as described in the [design](../../docs/design/wall-display.md#how-its-tested).
 
 The design, including what's still to come, is in [docs/design/wall-display.md](../../docs/design/wall-display.md).
 
@@ -12,6 +12,7 @@ The design, including what's still to come, is in [docs/design/wall-display.md](
 | `pi/` | `receive.py` (the only thing the Mac's key can run), `serve.py` (serves the page on the Pi only), `power.py` (sleeps and wakes the TV with your active hours) and `install.sh` |
 | `prototype/` | The drag-and-drop builder prototype and a mockup of the screen's states. Not used by anything yet, and the tasks in them are invented |
 | `e2e.mjs` | The screen in a real browser: `node apps/wall/e2e.mjs` |
+| `sim/` | The whole path against a simulated Pi, which needs Docker: `python3 apps/wall/sim/test_connection.py` |
 
 ## Connecting a Pi
 

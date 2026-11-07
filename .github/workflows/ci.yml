@@ -15,6 +15,14 @@ jobs:
           TERMS: ${{ secrets.LEAK_TERMS }}
         run: if [ -n "$TERMS" ]; then printf '%s\n' "$TERMS" > "$HOME/.theseus-private-terms"; fi
       - run: bash scripts/ci-checks.sh
+  wall-sim:
+    # The wall display from Mac-side command to screen, against a simulated Pi. Linux here, because macOS runners have no Docker.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 apps/wall/sim/test_connection.py
+        env:
+          WALL_SIM_RELEASE: trixie
   app:
     runs-on: macos-latest
     steps:
