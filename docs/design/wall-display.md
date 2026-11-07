@@ -272,7 +272,3 @@ apps/desktop/src/Wall.tsx     later: the builder page, on the app's Setup tab un
 - **macOS Local Network permission.** macOS 15 and later restrict apps reaching devices on your network, and the app's `Info.plist` has no `NSLocalNetworkUsageDescription` yet. It'll need one when delivery moves into the app. A one-off check on macOS 15 found a launch agent could reach a local device with `ssh`, so the current background job should work, and `theseus wall status` will say if it doesn't.
 - **Less to manage, never more (manifesto 2).** Drag-and-drop views are a new thing to fiddle with. The starter views have to be good enough that the builder stays optional, and the week of use is the real test.
 - **OLED burn-in** with fixed layouts: active hours help. On an OLED, the layout should also shift slightly every few minutes.
-
-## Docs still to change
-
-- **MANIFESTO.md:** belief 3 ("your data stays in plain files on your own computer") has one stated exception, and part of the list now also sits on your Pi. The README says so. The manifesto stays identical in both repositories, so changing it is a separate decision.
