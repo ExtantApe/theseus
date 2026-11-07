@@ -3,94 +3,75 @@
 # Theseus
 ### Clears the path, so you can make the call.
 
-**Free and open source, always.** No subscription, no paid tier, no data collection.
+**Free and open source, and it'll stay that way.** No subscription, no paid tier, no data collection.
 
-Theseus is a private personal assistant that runs in **[Claude Code](https://docs.claude.com/en/docs/claude-code/overview) on your Mac**.
-It's built for people (especially ADHD brains) with *too much coming in*: texts, email, Slack, reminders, six half-finished lists in Notes,
-family logistics, side projects. Theseus gathers all of it, sorts it into one prioritized list, notices what you've already handled, and
-hands you clear, small decisions.
+Theseus is a personal assistant that runs in [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) on your Mac. It's for anyone with too much coming in, especially ADHD brains: texts, email, Slack, reminders, six half-finished lists in Notes, family logistics, side projects. It pulls all of that into one ranked list, figures out what you've already handled, and leaves you with small decisions you can just make.
 
-**It doesn't live your life for you. It clears the path so you can decide easily.** It never sends a message, email or Slack post on your behalf.
-It drafts; you send.
+It won't send anything for you. No texts, no emails, no Slack posts. It writes the draft and you hit send.
 
-Theseus has a sister app, [Ariadne](https://github.com/mgilardi/ariadne), which files what piles up on your Mac. [The manifesto](MANIFESTO.md) is what both promise.
+Theseus has a sister app, [Ariadne](https://github.com/mgilardi/ariadne), which files what piles up on your Mac. [The manifesto](MANIFESTO.md) is what they both promise.
 
-> Named after Claude Shannon's *Theseus* (1950), the mechanical mouse that learned its way through a maze. This one learns its way through yours.
+The name comes from Claude Shannon's *Theseus* (1950), a mechanical mouse that learned its way through a maze. This one learns its way through yours.
 
 ---
 
-## It tailors itself to you
-You don't configure Theseus so much as introduce yourself to it.
-- **A setup interview** asks about your work and side projects, how your days run (regimented or fluid, weekdays vs weekends), which apps
-  you actually use, and how you like to be talked to. Everything goes into a plain-text **profile** you can edit anytime.
-- **Give it context and it goes looking.** "I run two small businesses and a podcast" becomes categories. "My old lists are in Notes" becomes a migration.
-- **It learns your writing voice** from your own sent texts (length, capitalization, emoji, how you say yes, no and later) and drafts replies that sound like you.
-- **It can keep notes on a conversation, when you ask.** Deep, neutral notes on how you and one person talk catch the small patterns and get it back up to speed without rereading the whole thread. Want an outside opinion on how you come across? Ask for `/mirror`.
-- **It learns how you prioritize**, from quick A-or-B questions and from what you actually do first, and turns your reasons into rules.
-- **It learns your rhythm.** If you're usually up later on weekends, it notices and suggests moving your briefings.
+## It fits itself to you
+There isn't much to configure. You tell it about yourself and it goes from there.
+- There's a setup interview. It asks about your work and side projects, how your days go (regimented or fluid, weekdays vs weekends), which apps you really use, and how you like to be talked to. That all goes into a plain-text **profile** you can change anytime.
+- Give it context and it'll go looking. "I run two small businesses and a podcast" becomes categories. "My old lists are in Notes" becomes a migration.
+- It learns your writing voice from your own sent texts (length, capitalization, emoji, how you say yes, no and later), so drafts sound like you.
+- If you ask, it'll keep notes on a conversation. They're deep, neutral notes on how you and one person talk, so it catches the small patterns and doesn't have to reread the whole thread. If you want an outside read on how you come across, that's `/mirror`.
+- It learns how you prioritize from quick A-or-B questions and from what you do first, then turns your reasons into rules.
+- It learns your rhythm too. If you're usually up later on weekends, it'll notice and suggest moving your briefings.
 
 ### Lightly opinionated
-Every new install starts blank: no one else's profile, priorities or voice, just templates. From your first `/theseus:setup` it gets to know
-**you**, and it keeps adjusting to how you actually operate. What you finish first, what you skip, when you're up, how you write and what you
-correct all become context it uses next time, and it always asks before turning a pattern into a rule.
+Every install starts blank. No one else's profile, priorities or voice, just templates. From your first `/theseus:setup` it's learning about **you**, and it keeps adjusting: what you finish first, what you skip, when you're up, how you write, what you correct. It always asks before turning a pattern into a rule.
 
-The few things that *don't* bend are deliberate:
+A few things don't bend, on purpose:
 | Fixed | Why |
 |---|---|
 | **A Mac that stays on** (awake, online, signed in) | Theseus lives on your Mac, next to your Reminders, Calendar, Notes and Messages. That's what keeps it private, and it's the one real requirement. |
 | **It never sends anything as you** | It clears the path; you make the call. |
 | **One list, ranked** (sections are yours to add) | Lots of lists is the problem it solves. |
 | **Your data stays in your workspace** | Nothing personal lives in the shared engine. |
-Everything else (categories, sections, schedule, sources, tone, how big NOW gets, which check-ins it offers) is yours to shape, by telling it or
-by letting it learn.
+Everything else is yours to change: categories, sections, schedule, sources, tone, how big NOW gets, which check-ins it offers. Tell it, or let it figure it out.
 
 ## Features
 
-### 🫧 Bubble-sort prioritizing: "Which first?"
-The feature that works best in practice. Ranking 20 things in your head is impossible. Choosing between **two** is easy:
+### "Which first?"
+This is the feature that works best in practice. Nobody can rank 20 things in their head, but picking between two is easy:
 ```
 Which first?  ① Renew business license (due Fri, ~15m)   or   ② Draft budget memo (no date, ~30m)
 ```
-Answer `1`, `2`, `same` or `skip`, or give a reason ("money stuff before noon"). Theseus keeps the winner on top, bubble-sort style, but efficiently:
-new items find their spot with a **binary insertion** (~4 questions for a list of 15), and a weekly pass re-checks only your top few.
-**Your reasons become rules** after you confirm them, so it asks less over time. Reordering lines in your Today note counts too.
+Answer `1`, `2`, `same` or `skip`, or give a reason ("money stuff before noon"). The winner stays on top, bubble-sort style, but it doesn't make you compare everything. New items find their spot with a **binary insertion** (about 4 questions for a list of 15), and a weekly pass only rechecks your top few. Once you confirm a reason it becomes a rule, so it asks less over time. Reordering lines in your Today note counts too.
 
 ### One list, everywhere
-**NOW · NEXT · LATER · EVENTUALLY · WAITING ON**, categorized and ranked, in a pinned Apple Notes note on every device. Reminders stay lean: only things
-that need a ping at a time or place become Reminders. Repeating tasks ("every other Friday") are one repeating Reminder, not 26 copies.
+**NOW · NEXT · LATER · EVENTUALLY · WAITING ON**, categorized and ranked, in a pinned Apple Notes note on every device. Reminders stay lean: only things that need a ping at a certain time or place become Reminders. Something like "every other Friday" is one repeating Reminder, not 26 copies.
 
-### 📌 A pinned Today note that works offline
-Your top tasks, agenda, who's waiting on you and what's due, refreshed whenever something changes. In the evening it gains a **🌙 Tomorrow** section
-(agenda, top 3, what to prep tonight). Type in **✍️ Jot here** or change ☐ to x, and Theseus reads your edits back on its next run.
+### A pinned Today note that works offline
+Your top tasks, agenda, who's waiting on you and what's due, refreshed whenever something changes. In the evening it adds a **🌙 Tomorrow** section with the agenda, your top 3 and what to prep tonight. Type in **✍️ Jot here** or change ☐ to x, and Theseus picks up your edits on its next run.
 
 ### It notices what you already did
-Replied to that text? Sent the email? Checked off the reminder on your phone? Theseus closes the task itself, or asks "Did you already…?" when it isn't sure.
+If you replied to that text, sent the email or checked off the reminder on your phone, Theseus closes the task itself. If it isn't sure, it asks "Did you already…?"
 
 ### "What's next?"
-"Finished everything except the memo, waiting on Alex, I've got 45 minutes." It checks things off, parks the memo under WAITING ON with the
-reason, and gives you **one** main pick plus up to two quick fillers that fit your time.
+Say "finished everything except the memo, waiting on Alex, I've got 45 minutes." It checks things off, moves the memo to WAITING ON with the reason, and gives you **one** main pick, plus up to two quick fillers that fit your time.
 
 ### Replies without the dread
 - `/texts` shows who's waiting on you, with ❓ when they asked a question. Say "sprint" to knock out the easy ones.
-- `/reply Sam` asks *you* Sam's open questions, phrased as if Sam just asked them ("Are you still coming Saturday?"), then writes the reply
-  **in your words**. It never fills in blanks, and it tells you when a part of the thread is worth reading yourself.
+- `/reply Sam` asks *you* Sam's open questions as if Sam just asked them ("Are you still coming Saturday?"), then writes the reply **in your words**. It never fills in blanks, and it'll tell you when part of the thread is worth reading yourself.
 
 ### "Got 5 minutes?"
-When things pile up (new items to rank, texts waiting for days, loose notes, stale tasks), Theseus offers **one** small, timed check-in at a
-good moment: *"Got 3 min? 6 new items need a spot. A few A-or-B taps clears your NEXT backlog."* Say yes, later, not today, or never for this.
-It won't ask during meetings or right before bed, and it learns when you like to tidy.
+When things pile up (new items to rank, texts waiting for days, loose notes, stale tasks), Theseus offers **one** small, timed check-in at a good moment: *"Got 3 min? 6 new items need a spot. A few A-or-B taps clears your NEXT backlog."* You can say yes, later, not today, or never for this. It won't ask during meetings or right before bed, and it learns when you like to tidy.
 
 ### Always reachable
-Theseus keeps a Remote Control server running on your Mac, so it's never cut off: open the Claude app's **Code** tab on your phone, tap your Mac,
-and start a session. Prefer texting? An optional iMessage channel lets you text yourself to reach it.
+Theseus keeps a Remote Control server running on your Mac. Open the Claude app's **Code** tab on your phone, tap your Mac, and start a session. If you'd rather text, there's an optional iMessage channel that lets you text yourself to reach it.
 
 ### Dictate anywhere
-A Notes folder that works as your inbox, `/add …` in Claude Code, or Siri "remind me…". Optional hints ("now", "someday", "#Work", "remind me at 3",
-"groceries: eggs") or none at all: it decides from context.
+Use a Notes folder as your inbox, `/add …` in Claude Code, or Siri "remind me…". You can add hints ("now", "someday", "#Work", "remind me at 3", "groceries: eggs") or skip them and let it decide from context.
 
 ### Briefings on your schedule
-A **morning** refresh before you wake and an **evening** look at tomorrow, per day of the week. Plus **frequent cheap checks**: a local fingerprint
-every few minutes, with Claude only when something actually changed.
+A **morning** refresh before you wake up and an **evening** look at tomorrow, set per day of the week. In between it runs **frequent cheap checks**: a local fingerprint every few minutes, and Claude only when something changed.
 
 ### Deep text tools
 Neutral, timestamped **thread reports** for long or multi-year conversations, topic research across all your texts, and a check that your full message history is on your Mac.
@@ -99,7 +80,7 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
 
 ## How to start
 1. **Install:** `git clone https://github.com/mgilardi/theseus && cd theseus && ./install.sh` (or install it as a Claude Code plugin, below).
-2. **Introduce yourself:** run `/theseus:setup` (plugin) or follow [docs/SETUP.md](docs/SETUP.md). Answer honestly. "I'm drowning" is useful context.
+2. **Introduce yourself:** run `/theseus:setup` (plugin) or follow [docs/SETUP.md](docs/SETUP.md). Be honest. "I'm drowning" is useful context.
 3. **Migrate:** `cd ~/Theseus && claude`, then `/migrate`. Theseus gathers your reminders, old list notes and task apps, removes duplicates,
    proposes categories and drafts your list for your approval.
 4. **Rank:** `/rank`. Ten quick A-or-B taps and your NOW list is in order.
@@ -110,10 +91,10 @@ Neutral, timestamped **thread reports** for long or multi-year conversations, to
 ### Theseus for Mac (recommended once you're set up)
 A menu bar app that keeps everything running: Remote Control, the checks and your briefings. You grant macOS permissions once, to the app, and everything it starts can use them.
 
-It's also the nicest way to work your list: drag things into order, check them off with a few seconds to change your mind, and edit it as plain Markdown. It saves as you go, with undo. Activity shows your thread notes, and Setup lists every command.
+It's also the nicest way to work your list. Drag things into order, check them off with a few seconds to change your mind, or edit it as plain Markdown. It saves as you go, with undo. Activity shows your thread notes, and Setup lists every command.
 
 1. Download the `.dmg` from [Releases](https://github.com/mgilardi/theseus/releases/latest) and drag Theseus to Applications.
-2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
+2. Apple charges for notarizing and Theseus is free, so it isn't notarized and macOS blocks the first launch. There are two ways to allow it:
 
    **Terminal (quickest):**
 
@@ -125,7 +106,7 @@ It's also the nicest way to work your list: drag things into order, check them o
 
 Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
 
-Then open it, allow what's listed on its Setup tab, then click **Run from this app…** there. From then on it opens at login and reopens after a crash. It runs the Theseus you installed above, so do the install first.
+Do the install above first, since the app runs that copy of Theseus. Then open it, allow what's listed on its Setup tab, and click **Run from this app…** there. After that it opens at login and reopens after a crash.
 
 Plugin install (inside Claude Code):
 ```
@@ -151,10 +132,10 @@ The `theseus` command works from anywhere, with the same workspace, rules and se
 | `theseus wall` | your list on a TV or monitor, from a Raspberry Pi: `setup <host>`, `show`, `status`, `titles on\|off`, `view <name>`, `hours <from> <to>`, `off`; no Claude |
 | `theseus sync` · `theseus morning` | run that job now and print the result |
 
-Only one job runs at a time. If the app or the schedule is already running one, `theseus sync` says so and stops. Anything you start from Terminal uses Terminal's macOS permissions, so Terminal needs the same access the app has.
+Only one job runs at a time, so if the app or the schedule already has one going, `theseus sync` says so and stops. Anything you start from Terminal uses Terminal's macOS permissions, so Terminal needs the same access the app has.
 
 ## Commands
-Inside a Claude Code session in your workspace. To see them all at a glance, run `/commands` there or `theseus help` in Terminal.
+These work in a Claude Code session in your workspace. To see them all, run `/commands` there or `theseus help` in Terminal.
 
 | Command | What it does |
 |---|---|
@@ -182,7 +163,7 @@ Plain words work too: "what's next, I have 20 minutes" is the same as `/next`.
 ---
 
 ## Integrations
-Use only what you have. Everything except Reminders, Calendar and Notes is optional, and you can add things later.
+Use what you have. Everything except Reminders, Calendar and Notes is optional, and you can add things later.
 
 | App / service | What Theseus does with it | How it connects | Status |
 |---|---|---|---|
@@ -207,25 +188,16 @@ Use only what you have. Everything except Reminders, Calendar and Notes is optio
 | Apple Watch alarms | (they never leave the watch) | tell Theseus the times | ❌ not readable |
 | Anything else (Notion, Todoist, Asana, Linear…) | whatever its tools allow | its MCP server or Composio toolkit, plus a line in your profile | 🧪 possible, not built in |
 
-### MCP and Composio: two ways to connect apps (use either, or both)
-- **[MCP](https://modelcontextprotocol.io) (Model Context Protocol)** is the open standard Claude Code uses to talk to other apps. Each service runs its own
-  MCP server, ideally an official one (Slack and ClickUp have them). You add each one to Claude Code and sign in through that service.
-  **Best when an official server exists:** one hop, the vendor's own permissions, nothing in between.
-- **[Composio](https://composio.dev)** is a third-party hub that speaks MCP. You connect your accounts once in Composio (Gmail, Google Calendar,
-  Outlook, Slack, Notion and 1,000+ more), and Claude Code reaches all of them through a single connection. **Best for** several accounts of the
-  same kind (two Gmails plus a business Google Workspace), apps without an official MCP server, or managing everything in one place.
-  The trade-off is that Composio holds your app sign-ins.
-- **Together is normal:** for example, Slack and ClickUp through their official servers, and Gmail and Google Calendar through Composio. Theseus asks during setup
-  which route you want for each service, and lists each account in `config.json` with a label.
-- **Or skip connectors for email and calendar entirely:** add your accounts to macOS (System Settings → Internet Accounts). Apple Mail and Calendar
-  then let Theseus read them locally with no third party involved.
+### MCP and Composio: two ways to connect apps
+You can use either one, or both.
+- **[MCP](https://modelcontextprotocol.io) (Model Context Protocol)** is the open standard Claude Code uses to talk to other apps. Each service runs its own MCP server, ideally an official one (Slack and ClickUp have them). You add each one to Claude Code and sign in through that service. If there's an official server, this is the better route: one hop, the vendor's own permissions, nothing in between.
+- **[Composio](https://composio.dev)** is a third-party hub that speaks MCP. You connect your accounts once in Composio (Gmail, Google Calendar, Outlook, Slack, Notion and 1,000+ more), and Claude Code reaches all of them through one connection. It's good for several accounts of the same kind (two Gmails plus a business Google Workspace), apps without an official server, or keeping everything in one place. The trade-off is that Composio holds your app sign-ins.
+- **Using both is normal.** For example, Slack and ClickUp through their official servers, and Gmail and Google Calendar through Composio. Setup asks which route you want for each service, and lists each account in `config.json` with a label.
+- **You can skip connectors for email and calendar altogether.** Add your accounts to macOS (System Settings → Internet Accounts), and Apple Mail and Calendar let Theseus read them locally with no third party involved.
 
 ### Slack, two ways
-1. **Official Slack connector:** add Slack's MCP server to Claude Code and sign in with Slack (OAuth). Theseus reads DMs, mentions and threads that need you.
-   Your workspace admin may need to approve it.
-2. **Email bridge (no Slack access at all):** Slack emails you about mentions and DMs you missed. A mail rule files those emails out of sight and marks them read,
-   and Theseus reads that folder and asks **"Did you get to these?"** in each briefing. Setup asks which email you use (Gmail, Google Workspace, Outlook or
-   Microsoft 365, iCloud, other) and walks you through the exact filter or rule for it.
+1. **Official Slack connector:** add Slack's MCP server to Claude Code and sign in with Slack (OAuth). Theseus reads DMs, mentions and threads that need you. Your workspace admin may need to approve it.
+2. **Email bridge (no Slack access at all):** Slack emails you about mentions and DMs you missed. A mail rule files those emails out of sight and marks them read, then Theseus reads that folder and asks **"Did you get to these?"** in each briefing. Setup asks which email you use (Gmail, Google Workspace, Outlook or Microsoft 365, iCloud, other) and walks you through the exact filter or rule.
 
 Either way, Theseus never posts to Slack.
 
@@ -237,7 +209,7 @@ Either way, Theseus never posts to Slack.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
 ## What it costs
-Theseus itself is free. You only pay for Claude, and anything that just shows you a file or changes your list from Terminal doesn't use it.
+Theseus is free. The only thing you pay for is Claude, and anything that just shows you a file or changes your list from Terminal doesn't use it.
 
 | What | Cost | Needed for |
 |---|---|---|
@@ -256,8 +228,7 @@ Theseus itself is free. You only pay for Claude, and anything that just shows yo
 macOS 14+, Claude Code signed in with your own account, Apple developer tools (`xcode-select --install`). An iPhone is optional (texts, alarms).
 
 ## Contributing
-Run `scripts/leak-check.sh` before every commit (`scripts/install-hooks.sh` makes it automatic). It blocks anything from your private terms list, plus phone
-numbers and real-looking emails. Changes Theseus makes to its own engine on your Mac are handed back through `data/local-changes.md` (docs/SETUP.md §10a).
+Run `scripts/leak-check.sh` before every commit (`scripts/install-hooks.sh` makes it automatic). It blocks anything on your private terms list, plus phone numbers and real-looking emails. If Theseus changes its own engine on your Mac, those changes get handed back through `data/local-changes.md` (docs/SETUP.md §10a).
 
 Questions and ideas: [open an issue](https://github.com/mgilardi/theseus/issues).
 
