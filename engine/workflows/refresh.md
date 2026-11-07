@@ -2,7 +2,7 @@
 description: Full fresh status: sync everything, process inbox, texts, calendar, email
 ---
 Run a complete, fresh status update per engine/RULES.md §5. Re-run everything; never reuse an earlier briefing. Use only integrations enabled in config.json.
-1. Sync per §3: Reminders (completed since `last_sync`), plus Skylight and ClickUp if enabled.
+1. Sync per §3: Reminders (completed since `last_sync`), plus Skylight and ClickUp if enabled. Connected services are always read here, then `python3 engine/tools/rereads.py done`.
 2. Process the Notes inbox (§4): `python3 engine/tools/notes.py inbox`.
 3. `python3 engine/tools/notes.py master-read`. If `edited_by_user` is true, fold the edits into data/master.md first.
 4. Texts: `python3 engine/tools/imsg.py --fresh missed`.

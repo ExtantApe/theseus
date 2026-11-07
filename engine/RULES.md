@@ -166,9 +166,17 @@ A `was:<section>` on a done item is where it came from, for the app's reopen. Le
 `data/sync-map.json` links one task across systems:
 `{"t0042": {"reminder": "<ek id>", "skylight_item": "<id>", "clickup": "<id>", "person": "Sam Rivera", "email_to": "sam@example.com", "title": "…", "done": false}}`
 
+**Connected services are read at set times, not on every sync.** ClickUp, and any calendar, email or Jira reached through a connector, have limits that frequent syncs would use up. A quiet sync runs `python3 engine/tools/rereads.py due` and reads them only if `due` is true. `/morning`, `/nightly` and `/refresh` always read them. After a read that worked, run `python3 engine/tools/rereads.py done`. A sync that skips them says when they were last read, in one short line. When something linked to ClickUp is completed on the list, update ClickUp then, whether or not a read is due.
+
+**A ClickUp read is two calls.**
+- `clickup_filter_tasks` with `assignees: ["me"]` and `include_closed: false`, then keep what's due within 14 days, overdue, or linked in `data/sync-map.json`.
+- `clickup_filter_tasks` with `assignees: ["me"]` and `date_closed_from` set to the day of the last read, to see what was finished.
+- Take dates from this Mac, so don't call `clickup_get_user`. Follow `next_page` if `has_more` is true.
+- Use `clickup_get_task` only for a linked task missing from both results, and only in `/morning` or `/nightly`.
+- If ClickUp says its limit is reached, stop calling it for this run, don't run `done`, and say so.
+
 1. **Pull** whatever is enabled: Reminders (incomplete, plus completed since `last_sync`), Skylight to-do
-   and grocery lists plus chores for today through 7 days out, ClickUp tasks assigned to the user
-   (due ≤ 14 days or overdue), and the Notes inbox.
+   and grocery lists plus chores for today through 7 days out, the Notes inbox, and connected services if a read is due.
 2. **Done anywhere = done everywhere**, except repeating items: completed in any linked system → complete it in the others and move it to ✅ DONE.
    **Repeating (`↻`) items are never moved to DONE by one completion.** Completing one occurrence (in Reminders, in the Today note, or by
    saying so) means "done for this time": complete the Reminder occurrence (Reminders then advances to the next date), keep the master item where it is
@@ -303,7 +311,7 @@ by scripts, so the note uses typed ☐ characters. Tell the user once: "change �
 
 ### `/nightly` (scheduled per day: ~2.5 h before that day's bed time)
 1. **Health check** every enabled service → `data/health.json` (including Remote Control, §5a): `imsg.py doctor`, `mail.py doctor` (Apple Mail only), `ek access`,
-   `notes.py inbox`, `alarms.py`, and one cheap read per connector account (every email and calendar account listed, Skylight, ClickUp).
+   `notes.py inbox`, `alarms.py`, and one cheap read per connector account (every email and calendar account listed, Skylight). ClickUp's check is the read in step 2.
    If anything fails, add a "⚠️ Needs attention" section at the top of the Today note with the fix steps from docs/SETUP.md.
 2. Today-note read-back, then a full scan and sync with auto-detection, plus the inbox.
 3. Write `data/prep/<tomorrow>.md`: calendar with gaps and travel buffers, deadlines in the next 72h, a proposed NOW list,

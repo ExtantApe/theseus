@@ -1176,6 +1176,48 @@ class WallDefaults(unittest.TestCase):
         self.assertEqual(views["views"][0]["name"], "Sectors")
 
 
+class Rereads(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, str(TOOLS))
+        import rereads
+        self.r = rereads
+        self.times = [(12, 0), (16, 0)]
+
+    def at(self, h, m=0, day=7):
+        return dt.datetime(2026, 11, day, h, m)
+
+    def test_never_read_is_due(self):
+        self.assertTrue(self.r.is_due(self.times, None, self.at(9)))
+
+    def test_not_due_between_set_times_after_a_read(self):
+        self.assertFalse(self.r.is_due(self.times, self.at(12, 5), self.at(13)))
+
+    def test_due_once_a_set_time_passes(self):
+        self.assertTrue(self.r.is_due(self.times, self.at(11), self.at(12)))
+        self.assertTrue(self.r.is_due(self.times, self.at(12, 5), self.at(16, 30)))
+        self.assertFalse(self.r.is_due(self.times, self.at(16, 31), self.at(23)))
+
+    def test_not_due_before_the_first_set_time(self):
+        self.assertFalse(self.r.is_due(self.times, self.at(23, 0, day=6), self.at(9)))
+
+    def test_bad_times_fall_back_to_the_defaults(self):
+        self.assertEqual(self.r.set_times({"reread_times": ["soon", 12, "25:00"]}), self.times)
+        self.assertEqual(self.r.set_times({}), self.times)
+        self.assertEqual(self.r.set_times({"reread_times": ["9:30", "9:30"]}), [(9, 30)])
+
+    def test_the_command_records_and_reports_in_a_throwaway_workspace(self):
+        ws = Path(tempfile.mkdtemp(prefix="theseus-rereads-"))
+        self.addCleanup(shutil.rmtree, ws, True)
+        (ws / "config.json").write_text(json.dumps({"reread_times": ["00:00"]}))
+        env = {**os.environ, "THESEUS_HOME": str(ws)}
+        run = lambda c: subprocess.run(["/usr/bin/python3", str(TOOLS / "rereads.py"), c], capture_output=True, text=True, env=env, check=True).stdout
+        self.assertTrue(json.loads(run("due"))["due"])
+        run("done")
+        self.assertFalse(json.loads(run("due"))["due"])
+        (ws / "data/reread-state.json").write_text("not json")
+        self.assertTrue(json.loads(run("due"))["due"])
+
+
 class Versions(unittest.TestCase):
     def test_everything_says_the_same_version(self):
         v = (ROOT / "engine/VERSION").read_text().strip()

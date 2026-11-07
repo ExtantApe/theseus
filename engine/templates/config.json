@@ -69,6 +69,7 @@
     "skip_if_nothing_changed": true,
     "full_refresh_every_minutes": 60
   },
+  "reread_times": ["12:00", "16:00"],
   "ensure_apps": [],
   "my_handles": [],
   "contact_overrides": {},

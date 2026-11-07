@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Fewer calls to connected services.** ClickUp's connector allows 100 calls a day, and syncing every 15 minutes used most of them. Connected services are now read at set times (`reread_times`), plus the morning and nightly runs, and a ClickUp read takes two calls.
 - **A first wall display.** `theseus wall setup <host>` puts your list on a TV or monitor from a Raspberry Pi, grouped by category, with no Claude. Your Mac sends only what the screen's views use, and never messages, email or your Today note. Task titles stay off until you choose, and `theseus wall hours 6am 12am` sets when the screen is on. It hasn't run on a real Pi yet.
 
 ## 0.6.0

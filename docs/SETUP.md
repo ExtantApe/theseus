@@ -95,6 +95,7 @@ bash ~/Theseus/engine/install.sh --schedule
 - **📌 Today updates every time Theseus runs.** Pin it in Notes (swipe right → pin). If you can't reach Claude, it's all there.
   Type in **✍️ Jot here**, or change ☐ to **x** to check something off, and Theseus reads it back next run. (Notes' own checklist
   circles can't be read by scripts, so use the typed boxes.) Turn on `checks` if you want it refreshed through the day.
+- **Connected services:** ClickUp, and any calendar, email or Jira reached through a connector, are read at `"reread_times": ["12:00", "16:00"]`, and by the morning, nightly and `/refresh` runs. Frequent checks don't read them, so they stay within their limits.
 - **Frequent checks (optional):**
   `"checks": {"enabled": true, "every_minutes": 5, "min_minutes_between_claude_runs": 15, "only_while_awake": true, "skip_if_nothing_changed": true, "full_refresh_every_minutes": 60}`
   - Every `every_minutes` (1–60), a **local fingerprint** (`engine/tools/changes.py`, no Claude, typically under a second) checks
