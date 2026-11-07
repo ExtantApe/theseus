@@ -35,8 +35,10 @@ Set during `/theseus:setup` (`email_source`, `calendar_source` in `config.json`)
 | Best if you… | use Gmail, Google Calendar or Outlook directly (web or apps) | already use Apple Mail / Calendar with your accounts added |
 | Multiple accounts | yes, list each one in `email_accounts` / `calendar_accounts` | yes, everything in System Settings → Internet Accounts |
 | Writes events to | the exact account/calendar you route to (`calendar_routes`) | any calendar synced into the Calendar app |
-| Data path | goes through the connector service | stays on your Mac |
+| Data path | goes through the connector service | read on your Mac, with no other service in between |
 | Catch | needs a connector account; your employer may block it | the Mail app must run to fetch new mail |
+
+Either way, what Claude reads goes to Anthropic on your account.
 
 You can mix them, e.g. email via a connector and calendar via Apple.
 
