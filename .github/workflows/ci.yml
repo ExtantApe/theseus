@@ -29,4 +29,5 @@ jobs:
       - run: pnpm --filter theseus-desktop build
       - run: pnpm exec playwright install webkit
       - run: pnpm --filter theseus-desktop e2e
+      - run: WALL_BROWSER=webkit node apps/wall/e2e.mjs
       - run: pnpm --filter theseus-desktop tauri build --no-bundle

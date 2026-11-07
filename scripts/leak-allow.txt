@@ -5,3 +5,4 @@ mgilardi/theseus
 128x128@2x.png
 io.github.mgilardi.theseus
 github.com/mgilardi/ariadne
+getty@tty1.service

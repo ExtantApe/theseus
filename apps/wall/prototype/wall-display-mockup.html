@@ -1,0 +1,296 @@
+<!doctype html>
+<!--
+  Mockup of the Theseus wall display. The tasks are invented. Open with ?state=titles|counts|stale|clear|pairing|busy, or press 1 to 6.
+  Spec: docs/design/wall-display.md. Text only ever goes in through textContent, because titles come from outside sources.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Theseus wall display (mockup)</title>
+<style>
+  /* Dark tokens from apps/desktop/src/ui/family.css. --u is the one size unit, so the page scales from 720p to 4K. */
+  :root {
+    --bg: #161210; --panel: #231d19; --text: #f2ebe0; --muted: #a89a8f; --border: #372e28;
+    --accent: #6fc4bd; --hero: #17484a; --warn: #e7a066; --ok: #7dc4a5;
+    --u: 1vh;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; cursor: none; }
+  h1, h2, p, ol { margin: 0; padding: 0; }
+  .icon { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* The inset keeps everything clear of TV overscan. Top strip, then the sectors, then one footer line. */
+  .wall { height: 100%; padding: calc(4.5 * var(--u)) calc(5.5 * var(--u)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: calc(3 * var(--u)); }
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(5 * var(--u)); align-items: stretch; min-width: 0; }
+  .sectors-wrap { min-height: 0; min-width: 0; overflow: hidden; }
+
+  /* The one thing to read from across the room. */
+  .hero { min-width: 0; display: grid; grid-template-columns: calc(6 * var(--u)) minmax(0, 1fr); column-gap: calc(1.2 * var(--u)); align-content: center; align-items: baseline; padding: calc(2.4 * var(--u)) calc(3.2 * var(--u)); border-radius: calc(1.6 * var(--u)); background: var(--hero); }
+  .hero .rank { font-size: calc(5 * var(--u)); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .hero .title { font-size: calc(5.8 * var(--u)); line-height: 1.12; font-weight: 600; letter-spacing: -.012em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hero .meta { grid-column: 2; margin-top: calc(1 * var(--u)); display: flex; gap: calc(2 * var(--u)); font-size: calc(2.7 * var(--u)); color: #c9dcd8; }
+
+  /* Sectors: one card per category, highest-ranked first. Rank numbers stay the list's own, so the order is still there to read. */
+  .sectors { height: 100%; columns: 3; column-gap: calc(3 * var(--u)); }
+  .sector { break-inside: avoid; margin-bottom: calc(2 * var(--u)); padding: calc(1.5 * var(--u)) calc(2.1 * var(--u)) calc(1.3 * var(--u)); border-radius: calc(1.3 * var(--u)); background: var(--panel); border: 1px solid var(--border); }
+  .sector h2 { display: flex; justify-content: space-between; font-size: calc(2.3 * var(--u)); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: calc(.6 * var(--u)); }
+  .sector h2 span { color: var(--muted); font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .sector ol { list-style: none; }
+  .row { display: grid; grid-template-columns: calc(4.4 * var(--u)) minmax(0, 1fr); align-items: baseline; padding: calc(.75 * var(--u)) 0; }
+  .row .rank { font-size: calc(2.4 * var(--u)); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .title { font-size: calc(3.2 * var(--u)); line-height: 1.18; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row .due { grid-column: 2; font-size: calc(2.4 * var(--u)); color: var(--muted); margin-top: calc(.2 * var(--u)); }
+  .hero .due-late, .row .due-late { color: var(--warn); }
+  .sector .extra { padding: calc(.5 * var(--u)) 0 calc(.3 * var(--u)) calc(4.4 * var(--u)); font-size: calc(2.4 * var(--u)); color: var(--muted); }
+
+  .clockbox { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
+  .clock { font-size: calc(12.5 * var(--u)); line-height: 1; font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .clock small { font-size: .3em; letter-spacing: 0; color: var(--muted); margin-left: .25em; font-weight: 400; }
+  .date { font-size: calc(3.2 * var(--u)); color: var(--muted); margin-top: calc(1.2 * var(--u)); white-space: nowrap; }
+
+  /* The footer: what's beyond this screen, what's behind Now, and whether this can be trusted. */
+  .foot { display: flex; align-items: center; gap: calc(3.5 * var(--u)); font-size: calc(2.6 * var(--u)); color: var(--muted); white-space: nowrap; }
+  .foot b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .foot .status { margin-left: auto; display: flex; align-items: center; gap: calc(1.2 * var(--u)); }
+  .foot .mark { font-size: calc(3 * var(--u)); color: var(--accent); display: flex; }
+  .foot.stale .status, .foot.stale .mark { color: var(--warn); }
+
+  /* Stale: still there, visibly not current, and nothing moves. */
+  .is-stale .hero, .is-stale .sectors { opacity: .5; }
+
+  /* Counts-only */
+  .big, .calm { height: 100%; display: flex; flex-direction: column; justify-content: center; }
+  .big .n { font-size: calc(26 * var(--u)); line-height: .95; font-weight: 300; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .big .of { font-size: calc(5.6 * var(--u)); font-weight: 500; margin-top: calc(1.6 * var(--u)); }
+  .chips { display: flex; flex-wrap: wrap; gap: calc(1.6 * var(--u)); margin-top: calc(5 * var(--u)); }
+  .chip { display: inline-flex; align-items: center; padding: calc(1 * var(--u)) calc(2.2 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--panel); border: 1px solid var(--border); font-size: calc(3 * var(--u)); }
+  .chip.late { color: var(--warn); }
+  .note { margin-top: calc(4 * var(--u)); display: flex; align-items: center; gap: calc(1.3 * var(--u)); font-size: calc(2.7 * var(--u)); color: var(--muted); }
+
+  /* Nothing left, and first run */
+  .calm .glyph { font-size: calc(11 * var(--u)); color: var(--accent); display: flex; margin-bottom: calc(3.4 * var(--u)); }
+  .calm h1 { font-size: calc(8 * var(--u)); font-weight: 500; line-height: 1.1; letter-spacing: -.015em; }
+  .calm p { margin-top: calc(2.2 * var(--u)); font-size: calc(3.6 * var(--u)); color: var(--muted); line-height: 1.35; max-width: 34em; }
+  .calm code { display: inline-block; margin-top: calc(3.4 * var(--u)); padding: calc(1.6 * var(--u)) calc(2.4 * var(--u)); border-radius: calc(1.2 * var(--u)); background: var(--panel); border: 1px solid var(--border); color: var(--text); font: calc(3.3 * var(--u))/1.2 ui-monospace, Menlo, 'DejaVu Sans Mono', monospace; }
+
+  /* Portrait: the same order, in a single column of sectors. */
+  @media (max-aspect-ratio: 1/1) {
+    :root { --u: 1.13vw; }
+    .wall { padding: calc(6 * var(--u)) calc(5 * var(--u)); }
+    .top { grid-template-columns: minmax(0, 1fr); }
+    .clockbox { order: -1; align-items: flex-start; }
+    .sectors { columns: 1; }
+    .row { grid-template-columns: calc(4.4 * var(--u)) minmax(0, 1fr) auto; column-gap: calc(1 * var(--u)); }
+    .row .due { grid-column: 3; margin-top: 0; white-space: nowrap; }
+    .foot { flex-wrap: wrap; row-gap: calc(1 * var(--u)); }
+    .foot .status { margin-left: 0; flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<div id="wall" class="wall"></div>
+<script>
+// Fixtures in the schema from the spec. Invented tasks; the clock is fixed so the screenshots stay comparable.
+const NOW = new Date('2026-11-05T08:42:00')
+const at = (minutesAgo) => new Date(NOW - minutesAgo * 60000).toISOString()
+const items = [
+  { rank: 1, title: 'Renew the business license', due: 'Thu 11/5', due_date: '2026-11-05', category: 'Work' },
+  { rank: 2, title: 'Send the signed lease back', due: 'Tue 11/3', due_date: '2026-11-03', category: 'Home' },
+  { rank: 3, title: 'Draft the budget memo', due: null, due_date: null, category: 'Work' },
+  { rank: 4, title: 'Book flights for the reunion', due: 'Fri 11/6', due_date: '2026-11-06', category: 'Family' },
+  { rank: 5, title: 'Pay the quarterly estimate', due: 'Mon 11/9', due_date: '2026-11-09', category: 'Money' },
+  { rank: 6, title: 'Order furnace filters', due: null, due_date: null, category: 'Home' },
+  { rank: 7, title: 'Schedule the annual checkup', due: null, due_date: null, category: 'Health' },
+  { rank: 8, title: 'Call about the gutter estimate', due: '11/12', due_date: '2026-11-12', category: 'Home' },
+  { rank: 9, title: 'Pick a date for the car service appointment', due: '11/14', due_date: '2026-11-14', category: 'Car' },
+  { rank: 10, title: 'Sign the permission slip', due: 'Fri 11/6', due_date: '2026-11-06', category: 'Family' },
+  { rank: 11, title: 'Edit episode twelve', due: null, due_date: null, category: 'Podcast' },
+  { rank: 12, title: 'Move savings to the new account', due: null, due_date: null, category: 'Money' },
+  { rank: 13, title: 'Reply to the vendor proposal', due: null, due_date: null, category: 'Work' },
+]
+const rest = [{ section: 'Next', open: 42 }, { section: 'Waiting on', open: 1 }]
+const list = { title: 'Now', open: 14, items, more: 0, kept_private: 1 }
+// The stress case: a list well past what fits, to show how the screen gives way.
+const busyNames = ['Work', 'Home', 'Family', 'Money', 'Health', 'Car', 'Podcast', 'Garden', 'School', 'Travel']
+const busyItems = Array.from({ length: 40 }, (_, n) => ({ rank: n + 1, title: `Example task number ${n + 1} with a typical length`, due: null, due_date: null, category: busyNames[n % busyNames.length] }))
+const SNAPSHOTS = {
+  titles: { schema: 1, generated_at: at(1), mode: 'titles', list, counts: rest },
+  counts: { schema: 1, generated_at: at(1), mode: 'counts', list: { title: 'Now', open: 14, items: [], due_today: 1, was_due: 1 }, counts: rest },
+  stale: { schema: 1, generated_at: at(372), mode: 'titles', list, counts: rest },
+  clear: { schema: 1, generated_at: at(1), mode: 'titles', list: { title: 'Now', open: 0, items: [], more: 0, kept_private: 0 }, counts: rest },
+  pairing: null,
+  busy: { schema: 1, generated_at: at(1), mode: 'titles', list: { title: 'Now', open: 46, items: busyItems, more: 6, kept_private: 0 }, counts: rest },
+}
+
+const SVG = 'http://www.w3.org/2000/svg'
+const icons = {
+  compass: 'M21.5 12A9.5 9.5 0 1 1 2.5 12A9.5 9.5 0 1 1 21.5 12Z M12 4.9L15.3 12L12 19.1L8.7 12Z', // brand/menu-bar.svg, redrawn on the 24 px grid
+  lock: 'M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z M8 11V7a4 4 0 0 1 8 0v4',
+  cloudOff: 'M3 3l18 18 M8.5 5.6A6 6 0 0 1 17.6 10h.9a3.5 3.5 0 0 1 2 6.4 M5.6 8.1A6 6 0 0 0 6 20h11.5',
+}
+function icon(name) {
+  const s = document.createElementNS(SVG, 'svg')
+  s.setAttribute('viewBox', '0 0 24 24')
+  s.setAttribute('class', 'icon')
+  const p = document.createElementNS(SVG, 'path')
+  p.setAttribute('d', icons[name])
+  s.append(p)
+  return s
+}
+// Everything from the snapshot goes in as text, never as markup.
+function el(tag, cls, ...kids) {
+  const e = document.createElement(tag)
+  if (cls) e.className = cls
+  e.append(...kids)
+  return e
+}
+
+function time(d) {
+  const h = d.getHours() % 12 || 12
+  return [`${h}:${String(d.getMinutes()).padStart(2, '0')}`, d.getHours() < 12 ? 'am' : 'pm']
+}
+function ago(mins) {
+  if (mins < 60) return `${mins} min ago`
+  const h = Math.floor(mins / 60)
+  return `${h} hour${h === 1 ? '' : 's'} ago`
+}
+
+// Worked out here from this screen's clock, so "Due today" is still true tomorrow if the Mac has been asleep.
+function dueDays(i) {
+  if (!i.due_date) return null
+  const midnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  return Math.round((new Date(`${i.due_date}T00:00`) - midnight(NOW)) / 86400000)
+}
+function dueLabel(i) {
+  const days = dueDays(i)
+  if (days === null) return i.due
+  if (days === 0) return 'Due today'
+  if (days > 0) return i.due
+  return days >= -6 ? `Was due ${new Date(`${i.due_date}T00:00`).toLocaleDateString('en-US', { weekday: 'short' })}` : `Was due ${i.due}`
+}
+
+function clockBox() {
+  const [t, ampm] = time(NOW)
+  return el('div', 'clockbox',
+    el('div', 'clock', t, el('small', '', ampm)),
+    el('div', 'date', NOW.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })),
+  )
+}
+
+function foot(snap, stale, shownOff = 0) {
+  if (!snap) return el('div', 'foot')
+  const parts = snap.counts.map((c) => el('span', '', `${c.section} `, el('b', '', String(c.open))))
+  const hidden = (snap.list.more || 0) + shownOff
+  if (hidden) parts.unshift(el('span', '', el('b', '', String(hidden)), ` more in ${snap.list.title}`))
+  if (snap.list.kept_private) parts.unshift(el('span', '', el('b', '', String(snap.list.kept_private)), ' kept private'))
+  const [st, sa] = time(new Date(snap.generated_at))
+  const mins = Math.round((NOW - new Date(snap.generated_at)) / 60000)
+  const said = stale ? `This list is from ${ago(mins)}. Your Mac may be asleep.` : `Up to date · ${st} ${sa}`
+  return el('div', stale ? 'foot stale' : 'foot', ...parts, el('span', 'status', el('span', 'mark', icon(stale ? 'cloudOff' : 'compass')), said))
+}
+
+function dueClass(i) { return dueDays(i) < 0 && dueDays(i) !== null ? 'due due-late' : 'due' }
+
+function heroView(first) {
+  const meta = el('div', 'meta')
+  if (first.due) meta.append(el('span', dueClass(first), dueLabel(first)))
+  if (first.category) meta.append(el('span', '', first.category))
+  return el('section', 'hero', el('div', 'rank', String(first.rank)), el('div', 'title', first.title), meta)
+}
+
+// Ranked flat list in, sectors out. A sector sits where its highest-ranked task puts it. The top task is in the hero, so it isn't repeated.
+function sectorsOf(tasks) {
+  const map = new Map()
+  for (const i of tasks) {
+    const name = i.category || 'Other'
+    if (!map.has(name)) map.set(name, [])
+    map.get(name).push(i)
+  }
+  return [...map].map(([name, tasks]) => ({ name, tasks }))
+}
+
+function sectorCard(s, cap) {
+  const shown = s.tasks.slice(0, cap)
+  const rows = shown.map((i) => {
+    const row = el('li', 'row', el('span', 'rank', String(i.rank)), el('span', 'title', i.title))
+    if (i.due) row.append(el('span', dueClass(i), dueLabel(i)))
+    return row
+  })
+  const card = el('section', 'sector', el('h2', '', s.name, el('span', '', String(s.tasks.length))), el('ol', '', ...rows))
+  if (s.tasks.length > shown.length) card.append(el('div', 'extra', `${s.tasks.length - shown.length} more`))
+  return card
+}
+
+// Everything fits if it can. If not, each sector gives up its lowest-ranked tasks, evenly, and the lowest-ranked sectors go last of all.
+function fitSectors(wrap, sectors) {
+  const box = el('div', 'sectors')
+  wrap.replaceChildren(box)
+  const fits = () => box.scrollWidth <= box.clientWidth + 1 && box.scrollHeight <= box.clientHeight + 1
+  const most = Math.max(0, ...sectors.map((s) => s.tasks.length))
+  for (let cap = most; cap >= 1; cap--) {
+    box.replaceChildren(...sectors.map((s) => sectorCard(s, cap)))
+    if (fits()) return 0
+  }
+  let left = sectors.length
+  while (left > 1 && !fits()) box.replaceChildren(...sectors.slice(0, --left).map((s) => sectorCard(s, 1)))
+  return sectors.slice(left).reduce((n, s) => n + s.tasks.length, 0)
+}
+
+function countsView(snap, stale) {
+  const chips = []
+  // Stale counts were true when sent and may not be now, so they aren't shown.
+  if (!stale && snap.list.due_today) chips.push(el('span', 'chip', `${snap.list.due_today} due today`))
+  if (!stale && snap.list.was_due) chips.push(el('span', 'chip late', `${snap.list.was_due} past its date`))
+  return el('div', 'big',
+    el('div', 'n', String(snap.list.open)),
+    el('div', 'of', `in ${snap.list.title}`),
+    el('div', 'chips', ...chips),
+    el('div', 'note', icon('lock'), 'Titles and sectors are off for this screen. To change that, run theseus wall titles on.'),
+  )
+}
+
+function clearView() {
+  return el('div', 'calm',
+    el('div', 'glyph', icon('compass')),
+    el('h1', '', 'Nothing left in Now.'),
+    el('p', '', 'The rest can wait until you want it.'),
+  )
+}
+
+function pairingView() {
+  return el('div', 'calm',
+    el('div', 'glyph', icon('compass')),
+    el('h1', '', 'Waiting for your Mac.'),
+    el('p', '', 'Your list will appear within a few minutes of your Mac waking up. If it doesn\'t, run this in Terminal on your Mac:'),
+    el('div', '', el('code', '', 'theseus wall setup theseus-wall.local')),
+  )
+}
+
+const STALE_AFTER_MINUTES = 15
+function render(name) {
+  const snap = SNAPSHOTS[name]
+  const root = document.getElementById('wall')
+  const stale = !!snap && (NOW - new Date(snap.generated_at)) / 60000 > STALE_AFTER_MINUTES
+  root.classList.toggle('is-stale', stale)
+  const wrap = el('div', 'sectors-wrap')
+  const hasList = !!snap && snap.mode !== 'counts' && snap.list.items.length > 0
+  const top = el('div', 'top', hasList ? heroView(snap.list.items[0]) : el('div', ''), clockBox())
+  root.replaceChildren(top, wrap, foot(snap, stale))
+  if (!snap) wrap.append(pairingView())
+  else if (snap.mode === 'counts') wrap.append(countsView(snap, stale))
+  else if (!hasList) wrap.append(clearView())
+  else {
+    const dropped = fitSectors(wrap, sectorsOf(snap.list.items.slice(1)))
+    if (dropped) root.lastChild.replaceWith(foot(snap, stale, dropped))
+  }
+}
+
+const names = Object.keys(SNAPSHOTS)
+addEventListener('keydown', (e) => { const n = names[Number(e.key) - 1]; if (n) render(n) })
+const asked = new URLSearchParams(location.search).get('state')
+render(names.includes(asked) ? asked : 'titles')
+</script>
+</body>
+</html>

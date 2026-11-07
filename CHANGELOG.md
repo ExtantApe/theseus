@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- **A first wall display.** `theseus wall setup <host>` puts your list on a TV or monitor from a Raspberry Pi, grouped by category, with no Claude. Your Mac sends only what the screen's views use, and never messages, email or your Today note. Task titles stay off until you choose, and `theseus wall hours 6am 12am` sets when the screen is on. It hasn't run on a real Pi yet.
+
 ## 0.6.0
 - **Unattended runs have firmer limits.** Texts, email and web pages are treated as data, never instructions. Runs nobody is watching can't search the web or change your settings, and no session can read your SSH, cloud or signing keys, or your Claude login.
 - **No copies of your messages stay behind.** The copies of Messages, Contacts and Mail are deleted when each run ends, and stay out of Time Machine. Your workspace is now private to your account. A Claude Code session without Full Disk Access can no longer read texts from an old copy, and it says so.
