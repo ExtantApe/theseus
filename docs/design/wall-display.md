@@ -266,7 +266,7 @@ Turning learning on is your yes to it adjusting hours, within those limits. That
 |---|---|---|
 | `python3 tests/test_engine.py` | The filter's promises, the commands, the settings, the launch agent file | Real code, with a stand-in for `ssh` and for HDMI commands |
 | `node apps/wall/e2e.mjs` | Every view at four sizes, every state, active hours, a whole night on an open page with a fast-forwarded clock, hostile titles | Real browsers and the real `serve.py`. The snapshots are written directly |
-| `python3 apps/wall/sim/test_connection.py` | First connect, updates, the Pi hung or off, a reboot, bad data, a changed identity, active hours, the kiosk, turning it off. On a Mac, also the real launchd job | The Mac-side code, `ssh`, a real TCP connection, an SSH server, Linux users, `sudo`, the real `install.sh` and packages, systemd, Chromium and cage are all real. **Docker stands in for the Pi, a headless output for HDMI, and a recording script for `cec-ctl`** |
+| `python3 apps/wall/sim/test_connection.py` | First connect, updates, the Pi hung or off, a reboot, bad data, a changed identity, active hours, the kiosk, turning it off. On a Mac, also the real launchd job | The Mac-side code, `ssh`, a real TCP connection, an SSH server, Linux users, `sudo`, the real `install.sh` and packages, systemd, Chromium and cage are all real. **Docker stands in for the Pi, a headless output for HDMI, and a recording script for `cec-ctl`**. CI runs this on trixie, without the kiosk checks, because GitHub's machine can hold the console they need. Those only run on a Mac |
 
 ### What only a real Pi and TV can show
 

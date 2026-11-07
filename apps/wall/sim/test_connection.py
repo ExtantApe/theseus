@@ -457,29 +457,33 @@ def scenario(sim):
     check("after accepting it, everything works again", p.returncode == 0 and "Send the lease back today" in json.dumps(on_pi_json()), p.stderr[-400:])
 
     section("The kiosk: real cage and real Chromium, drawing to a headless output instead of HDMI")
-    check("the service waits for its page before starting the browser", "serve.py --wait" in pi("cat", "/etc/systemd/system/theseus-wall-screen.service").stdout)
-    pi("apt-get", "install", "-y", "-qq", "--no-install-recommends", "grim", "python3-pil", timeout=300)
-    # With no GPU here, the service has been retrying all along, which is what it's meant to do. Now give it an output it can use.
-    pi_sh("systemctl stop theseus-wall-screen.service; systemctl reset-failed theseus-wall-screen.service; mkdir -p /etc/systemd/system/theseus-wall-screen.service.d && printf '[Service]\\nEnvironment=WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1\\n' > /etc/systemd/system/theseus-wall-screen.service.d/sim.conf && systemctl daemon-reload && systemctl start --no-block theseus-wall-screen.service")
-    uid = pi("id", "-u", "kiosk").stdout.strip()
-    up = wait_until(lambda: pi("pgrep", "-u", "kiosk", "-f", "/usr/lib/chromium/chromium").returncode == 0 and pi("pgrep", "-u", "kiosk", "cage").returncode == 0 and pi("test", "-S", f"/run/user/{uid}/wayland-0").returncode == 0, 90)
-    check("the real screen service starts cage and Chromium as the kiosk account", up, pi("journalctl", "-u", "theseus-wall-screen.service", "-n", "12", "--no-pager").stdout[-800:])
-    if up:
-        restarts = pi("systemctl", "show", "-p", "NRestarts", "--value", "theseus-wall-screen.service").stdout.strip()
-        time.sleep(20)
-        got = pi_sh(f"WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/{uid} grim /home/kiosk/kiosk.png && stat -c %s /home/kiosk/kiosk.png", user="kiosk")
-        shot_ok = got.returncode == 0 and int((got.stdout.strip() or "0").splitlines()[-1]) > 5000
-        check("and it draws something real", shot_ok, got.stdout + got.stderr)
-        if shot_ok:
-            save_picture("/home/kiosk/kiosk.png", f"{RELEASE}-kiosk.png")
-            box = pi("python3", "-c", "from PIL import Image; im = Image.open('/home/kiosk/kiosk.png').convert('RGB'); print(im.size == im.getbbox()[2:], im.size, im.getbbox())").stdout.strip()
-            if RELEASE == "bookworm":
-                # bookworm's older cage logs "Basic output test failed" for a headless output, and hands the browser a tiny window whatever its flags. Not checked here, so it's unknown there.
-                print(f"NOTE  how much of the output the kiosk fills isn't meaningful on bookworm's headless output: {box}", flush=True)
-            else:
-                check("it fills the whole output", box.startswith("True"), box)
-        check("once it has an output, it stays up without restarting", pi("systemctl", "show", "-p", "NRestarts", "--value", "theseus-wall-screen.service").stdout.strip() == restarts)
-    pi_sh("rm -rf /etc/systemd/system/theseus-wall-screen.service.d; systemctl daemon-reload; systemctl stop theseus-wall-screen.service")
+    if os.environ.get("CI"):
+        # GitHub's host can hold /dev/tty1, which a container shares, so the service can't run there. Run this file on a Mac to cover it.
+        print("NOTE  the kiosk checks are skipped in CI, because the host's own console may be holding the terminal", flush=True)
+    else:
+        check("the service waits for its page before starting the browser", "serve.py --wait" in pi("cat", "/etc/systemd/system/theseus-wall-screen.service").stdout)
+        pi("apt-get", "install", "-y", "-qq", "--no-install-recommends", "grim", "python3-pil", timeout=300)
+        # With no GPU here, the service has been retrying all along, which is what it's meant to do. Now give it an output it can use.
+        pi_sh("systemctl stop theseus-wall-screen.service; systemctl reset-failed theseus-wall-screen.service; mkdir -p /etc/systemd/system/theseus-wall-screen.service.d && printf '[Service]\\nEnvironment=WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1\\n' > /etc/systemd/system/theseus-wall-screen.service.d/sim.conf && systemctl daemon-reload && systemctl start --no-block theseus-wall-screen.service")
+        uid = pi("id", "-u", "kiosk").stdout.strip()
+        up = wait_until(lambda: pi("pgrep", "-u", "kiosk", "-f", "/usr/lib/chromium/chromium").returncode == 0 and pi("pgrep", "-u", "kiosk", "cage").returncode == 0 and pi("test", "-S", f"/run/user/{uid}/wayland-0").returncode == 0, 90)
+        check("the real screen service starts cage and Chromium as the kiosk account", up, pi("journalctl", "-u", "theseus-wall-screen.service", "-n", "12", "--no-pager").stdout[-800:])
+        if up:
+            restarts = pi("systemctl", "show", "-p", "NRestarts", "--value", "theseus-wall-screen.service").stdout.strip()
+            time.sleep(20)
+            got = pi_sh(f"WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/{uid} grim /home/kiosk/kiosk.png && stat -c %s /home/kiosk/kiosk.png", user="kiosk")
+            shot_ok = got.returncode == 0 and int((got.stdout.strip() or "0").splitlines()[-1]) > 5000
+            check("and it draws something real", shot_ok, got.stdout + got.stderr)
+            if shot_ok:
+                save_picture("/home/kiosk/kiosk.png", f"{RELEASE}-kiosk.png")
+                box = pi("python3", "-c", "from PIL import Image; im = Image.open('/home/kiosk/kiosk.png').convert('RGB'); print(im.size == im.getbbox()[2:], im.size, im.getbbox())").stdout.strip()
+                if RELEASE == "bookworm":
+                    # bookworm's older cage logs "Basic output test failed" for a headless output, and hands the browser a tiny window whatever its flags. Not checked here, so it's unknown there.
+                    print(f"NOTE  how much of the output the kiosk fills isn't meaningful on bookworm's headless output: {box}", flush=True)
+                else:
+                    check("it fills the whole output", box.startswith("True"), box)
+            check("once it has an output, it stays up without restarting", pi("systemctl", "show", "-p", "NRestarts", "--value", "theseus-wall-screen.service").stdout.strip() == restarts)
+        pi_sh("rm -rf /etc/systemd/system/theseus-wall-screen.service.d; systemctl daemon-reload; systemctl stop theseus-wall-screen.service")
 
     if sys.platform == "darwin" and not os.environ.get("CI"):
         section("The background job, in this Mac's real launchd")

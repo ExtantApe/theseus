@@ -84,7 +84,10 @@ PAMName=login
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
-StandardInput=tty
+# If something else holds the terminal, fail and retry rather than wait forever, and keep any errors where they can be read.
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
 RuntimeDirectory=theseus-wall-kiosk
 Environment=XDG_RUNTIME_DIR=/run/theseus-wall-kiosk
 Environment=XDG_SESSION_TYPE=wayland

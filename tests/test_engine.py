@@ -1154,6 +1154,7 @@ class WallReceive(unittest.TestCase):
         self.assertIn("ExecStartPre=", source, "a browser that starts first shows an error page forever")
         self.assertRegex(source, r"apt-get install[^\n]*\bxwayland\b", "cage won't start without it")
         self.assertIn("restart --no-block theseus-wall-screen.service", source, "a slow browser must not fail the whole install; the service retries by itself")
+        self.assertIn("StandardInput=tty-fail", source, "waiting for a held terminal hangs the screen with no error")
         self.assertIn("AccuracySec=1s", source, "or systemd may run the once-a-minute job up to a minute late")
 
     def test_the_page_can_only_talk_to_this_pi(self):
