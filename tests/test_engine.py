@@ -1154,6 +1154,15 @@ class WallReceive(unittest.TestCase):
         self.assertNotIn("innerHTML", (display / "wall.js").read_text())
 
 
+class WallDefaults(unittest.TestCase):
+    def test_a_new_screen_starts_on_sectors(self):
+        sys.path.insert(0, str(TOOLS))
+        import wall
+        views = wall.start_views()
+        self.assertEqual(views["change"], {"mode": "fixed", "minutes": 5, "active": "Sectors"})
+        self.assertEqual(views["views"][0]["name"], "Sectors")
+
+
 class Versions(unittest.TestCase):
     def test_everything_says_the_same_version(self):
         v = (ROOT / "engine/VERSION").read_text().strip()

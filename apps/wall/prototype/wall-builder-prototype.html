@@ -214,7 +214,7 @@ function starter() {
     view('Home', [tile('sector', 0, 0, 12, 13, { sector: 'Home', label: 'Home', size: 'L' }), tile('sector', 12, 0, 12, 6, { sector: 'Family', label: 'Family', size: 'M' }), tile('sector', 12, 6, 12, 7, { sector: 'Home', section: 'Next', label: 'Home, next', size: 'M' }), tile('status', 0, 13, 12, 1)], { from: '17:00', to: '22:00' }),
     view('Clock', [tile('clock', 0, 2, 24, 7, { size: 'XL' }), tile('top', 3, 9, 18, 3, { size: 'L' }), tile('status', 0, 13, 12, 1)], { from: '22:00', to: '07:00' }),
   ]
-  return { screen: 'landscape', change: { mode: 'schedule', minutes: 5 }, hours: { from: '06:00', to: '00:00' }, active: views[0].id, views, mine: [] }
+  return { screen: 'landscape', titles: true, change: { mode: 'fixed', minutes: 5 }, hours: { from: '06:00', to: '00:00' }, active: views[0].id, views, mine: [] }
 }
 
 // ---------- State: saved as you go, with undo and redo ----------
@@ -591,6 +591,8 @@ function renderPanel() {
   box.append(act, el('hr', 'rule'), el('h2', '', 'This screen'))
   box.append(field('Which view shows', select(state.change.mode, [['schedule', 'By time of day'], ['rotate', 'Take turns'], ['fixed', 'Stay on one view']], (val) => change(() => { state.change.mode = val }))))
   if (state.change.mode === 'rotate') box.append(field('Minutes on each view', input('number', state.change.minutes, (val) => change(() => { state.change.minutes = Math.max(1, Math.min(240, Number(val) || 5)) }))))
+  box.append(check('Show task titles', state.titles !== false, (on) => change(() => { state.titles = on }, on ? 'Titles are back on the screen' : 'Titles are hidden. The screen shows counts only')))
+  box.append(el('p', 'hint', 'Turn this off when guests are over. The screen switches to counts, and titles stop being sent to it.'))
   const always = !state.hours
   box.append(check('Keep the screen on all day', always, (on) => change(() => { state.hours = on ? null : { from: '06:00', to: '00:00' } })))
   if (state.hours) {

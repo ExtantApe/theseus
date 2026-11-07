@@ -237,6 +237,29 @@ apps/desktop/src/Wall.tsx     later: the builder page, on the app's Setup tab un
 
 `install.sh` copies `apps/wall/display` and `apps/wall/pi` to `wall/` in your workspace, so `theseus wall setup` can hand them to a Pi. One renderer means the builder's picture and the TV's picture can't drift apart.
 
+## Planned next: flexible schedules
+
+Not built yet. Active hours would become optional, with one setting and three choices, and everything stays on the Mac.
+
+| Choice | What it does |
+|---|---|
+| **Always on** | The screen never sleeps |
+| **Set hours** | The same hours every day. You can add separate weekend hours, or set each day on its own, including a day that stays off. Patterns can repeat over two or more weeks, such as every other Friday off |
+| **Learn my hours** | Starts from your set hours, then adjusts itself |
+
+**How the Pi follows it:** the snapshot would carry the next 14 days of hours, not just today's, so the schedule keeps working while the Mac sleeps.
+
+**How learning would work:**
+
+- **Signals, as times of day only:** when you use Theseus on the Mac, and when you ask for the screen outside its hours (`theseus wall wake` or `sleep`, or a button in the app). It never records what you were doing, and no Claude is involved.
+- **Adjusting:** weekdays and weekends are learned separately, from about the last four weeks. Asking for the screen early or late moves that day type's hours a quarter of the way toward what you asked for, and repeated requests add up.
+- **Limits:** a change of at most 30 minutes a day, always within limits you set. An override lasts until the next changeover, so it can't get stuck.
+- **Telling the truth:** `theseus wall status` and the app show the current hours and why they changed. Turning learning off goes back to your set hours and deletes what it learned, kept in `data/wall-learned.json`.
+
+Turning learning on is your yes to it adjusting hours, within those limits. That keeps Theseus's promise to ask before turning a pattern into a rule.
+
+**Order:** set hours first, because they're small and useful alone. Learning comes after a few weeks with a real Pi, once there's real use to learn from.
+
 ## How it's tested
 
 | Command | What it covers | What's real, and what isn't |
