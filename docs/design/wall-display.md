@@ -251,7 +251,8 @@ Not built yet. Active hours would become optional, with one setting and three ch
 
 **How learning would work:**
 
-- **Signals, as times of day only:** when you use Theseus on the Mac, and when you ask for the screen outside its hours (`theseus wall wake` or `sleep`, or a button in the app). It never records what you were doing, and no Claude is involved.
+- **Signals, as times of day only:** when you use Theseus on the Mac, and when you ask for the screen outside its hours. It never records what you were doing, and no Claude is involved.
+- **How you ask (decided, not built):** `theseus wall wake`, `theseus wall sleep`, or a button in the app.
 - **Adjusting:** weekdays and weekends are learned separately, from about the last four weeks. Asking for the screen early or late moves that day type's hours a quarter of the way toward what you asked for, and repeated requests add up.
 - **Limits:** a change of at most 30 minutes a day, always within limits you set. An override lasts until the next changeover, so it can't get stuck.
 - **Telling the truth:** `theseus wall status` and the app show the current hours and why they changed. Turning learning off goes back to your set hours and deletes what it learned, kept in `data/wall-learned.json`.
