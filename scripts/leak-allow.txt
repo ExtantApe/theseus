@@ -6,3 +6,4 @@ mgilardi/theseus
 io.github.mgilardi.theseus
 github.com/mgilardi/ariadne
 getty@tty1.service
+Copyright (c) 2026 EXTANT APE
