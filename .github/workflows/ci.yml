@@ -15,6 +15,27 @@ jobs:
           TERMS: ${{ secrets.LEAK_TERMS }}
         run: if [ -n "$TERMS" ]; then printf '%s\n' "$TERMS" > "$HOME/.theseus-private-terms"; fi
       - run: bash scripts/ci-checks.sh
+  wall-sim:
+    # The wall display from Mac-side command to screen, against a simulated Pi. Linux here, because macOS runners have no Docker.
+    # It takes several minutes, so it only runs when something it covers has changed. Anything unsure runs it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if git diff --name-only "$BASE" HEAD > changed.txt 2>/dev/null; then
+            if grep -qE '^(apps/wall/|engine/tools/(wall|cli|schedule)\.py$|\.github/workflows/ci\.yml$)' changed.txt; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.run == 'true'
+        run: python3 apps/wall/sim/test_connection.py
+        env:
+          WALL_SIM_RELEASE: trixie
   app:
     runs-on: macos-latest
     steps:
@@ -29,4 +50,5 @@ jobs:
       - run: pnpm --filter theseus-desktop build
       - run: pnpm exec playwright install webkit
       - run: pnpm --filter theseus-desktop e2e
+      - run: WALL_BROWSER=webkit node apps/wall/e2e.mjs
       - run: pnpm --filter theseus-desktop tauri build --no-bundle

@@ -47,6 +47,12 @@ IN TERMINAL
   theseus done "text"         check off what matches (instant)
   theseus undo                take back the last add or done, until the next sync (instant)
   theseus texts               who's waiting on a reply (instant; Terminal needs Full Disk Access)
+  theseus wall [show|status]  what your screen shows, and how it's doing (instant)
+  theseus wall setup <host>   connect a Raspberry Pi screen, once
+  theseus wall titles on|off  show task titles on that screen, or only counts
+  theseus wall view <name>    change the view on that screen
+  theseus wall hours 6am 12am when that screen is on and when it sleeps
+  theseus wall off            clear that screen and stop sending to it
   theseus sync                sync now
   theseus morning             run the morning briefing now
   theseus version             the installed version

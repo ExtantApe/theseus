@@ -148,6 +148,7 @@ The `theseus` command works from anywhere, with the same workspace, rules and se
 | `theseus done "bank"` | check off what matches; instant, no Claude, and the next sync carries it to your other lists |
 | `theseus undo` | take back the last `add` or `done`, until the next sync; instant, no Claude |
 | `theseus texts` | who's waiting on a reply; instant, no Claude (Terminal needs Full Disk Access) |
+| `theseus wall` | your list on a TV or monitor, from a Raspberry Pi: `setup <host>`, `show`, `status`, `titles on\|off`, `view <name>`, `hours <from> <to>`, `off`; no Claude |
 | `theseus sync` · `theseus morning` | run that job now and print the result |
 
 Only one job runs at a time. If the app or the schedule is already running one, `theseus sync` says so and stops. Anything you start from Terminal uses Terminal's macOS permissions, so Terminal needs the same access the app has.
@@ -231,7 +232,7 @@ Either way, Theseus never posts to Slack.
 ---
 
 ## Privacy and safety
-- **Your data stays in your workspace** (`~/Theseus`): profile, config, list, drafts, exports. The engine (this repo) holds no personal data, and updates never touch your files.
+- **Your data stays in your workspace** (`~/Theseus`): profile, config, list, drafts, exports. The engine (this repo) holds no personal data, and updates never touch your files. The one thing that leaves is optional: if you connect a wall display, the parts of your list its views show go to your own Pi over SSH, where they stay in memory. Messages, email and your Today note never do.
 - Messages, Mail, Contacts and Things are read **read-only from snapshots**. A hook on every connector (`engine/tools/send_guard.py`) refuses anything that sends, in every session, and unattended runs can only read connectors and make the specific updates a sync needs. Deleting needs you. Every change Theseus makes is logged.
 - Theseus runs in **your own Claude Code** and never handles your Anthropic login. A monthly check re-reads Anthropic's rules ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
@@ -247,8 +248,8 @@ Theseus itself is free. You only pay for Claude, and anything that just shows yo
 
 ## What's next
 - **Theseus for Mac, next steps:** one download with a first-run wizard in place of Terminal, drag-to-rank, and the reply questionnaire as a native form.
-- **Command center:** a wall or desk display (Raspberry Pi or any monitor, landscape or portrait), wall-safe by default.
-- **Voice and family (optional):** "show the family", "show my stuff", "in detail" (confirmed on your watch), and a family view for homes without Skylight.
+- **Wall display:** the first version is in `apps/wall`, and hasn't run on a real Pi yet. Next is a drag-and-drop builder in the Mac app ([design](docs/design/wall-display.md)).
+- **Family (optional):** a family view for homes without Skylight, with each person in control of their own data.
 - Plans and milestones: [docs/APP-PLAN.md](docs/APP-PLAN.md). Decisions: [docs/adr](docs/adr).
 
 ## Requirements

@@ -695,6 +695,487 @@ class OnlyWhenAsked(unittest.TestCase):
         self.assertNotIn("mirror", text)
 
 
+class WallDisplay(unittest.TestCase):
+    """The filter is the promise, so these try to get things past it. A stand-in for ssh hands deliveries to the Pi's real receive.py."""
+
+    MASTER = """# List
+## 🔥 NOW
+- [ ] Renew the license · #Work · due 11/5 · ~15m · ⏰ · id:a1
+  secret note under an item
+  ↗ https://example.test/very/secret
+- [ ] Send the lease back · #Home · due Tue 11/3 · id:a2
+- [ ] Ask about the raise · #Payroll · id:a3
+- [ ] Email boss@example.com about it · #Work · id:a4
+- [ ] Ring 415 555 0134 tomorrow · #Work · id:a5
+- [ ] Read example.com/plan · #Work · id:a6
+- [x] Already finished thing · #Work · id:a7
+- [ ] Water plants · #Home · ↻ weekly · done for now 11/1 · id:a8
+- [ ] 🧹 Sweep the porch · #Home · due 12/25 · id:a9
+
+## 💬 COMMUNICATIONS
+- [ ] COMMS-CANARY reply to someone · #Work · id:b1
+
+## ⏭ NEXT
+- [ ] Compare insurance · #Money · id:c1
+
+## 🗓 LATER
+- [ ] Refinish the deck · #Home · id:d1
+
+## ⏳ WAITING ON
+- [ ] WAITING-CANARY a named person · #Work · id:e1
+
+## ✅ DONE
+- [x] DONE-CANARY old thing · #Work · done 11/1 · id:f1
+"""
+
+    def setUp(self):
+        import wall
+        self.wall = wall
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-wall-"))
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        (self.ws / "data").mkdir()
+        (self.ws / "data/master.md").write_text(self.MASTER)
+        (self.ws / "data/today.md").write_text("# Today\nTODAY-CANARY Sam is waiting on you\n")
+        self.config = {"wall": {"enabled": True, "host": "screen.local", "titles": True, "private_categories": ["#Payroll"]}}
+        self.save_config()
+        self.now = dt.datetime(2026, 11, 5, 8, 42).astimezone()
+        self.env_home = os.environ.get("THESEUS_HOME")
+        os.environ["THESEUS_HOME"] = str(self.ws)
+        self.addCleanup(lambda: os.environ.pop("THESEUS_HOME", None) if self.env_home is None else os.environ.__setitem__("THESEUS_HOME", self.env_home))
+
+    def save_config(self):
+        (self.ws / "config.json").write_text(json.dumps(self.config))
+
+    def snap(self):
+        return self.wall.snapshot(self.ws, self.config, self.now)
+
+    def sent(self):
+        return json.dumps(self.snap(), ensure_ascii=False)
+
+    def views(self, *tiles):
+        (self.ws / "data/wall-views.json").write_text(json.dumps({"views": [{"name": "Mine", "layouts": {"landscape": list(tiles)}}]}))
+
+    def test_only_the_list_is_read(self):
+        self.assertNotIn("TODAY-CANARY", self.sent())
+        source = (TOOLS / "wall.py").read_text()
+        self.assertNotIn("today.md", source.split('"""', 2)[2])
+        for reader in ("imsg", "mail.py", "notes.py", "claude"):
+            self.assertNotIn(reader, source.split('"""', 2)[2].lower().replace("no claude", ""), reader)
+
+    def test_notes_links_ids_and_reminders_stay_behind(self):
+        out = self.sent()
+        for canary in ("secret note", "example.test", "id:", '"a1"', "⏰", "15m"):
+            self.assertNotIn(canary, out)
+
+    def test_done_and_communications_never_appear_even_if_asked_for(self):
+        self.views(*[{"type": "list", "x": 0, "y": n, "w": 8, "h": 1, "opts": {"section": s}} for n, s in enumerate(["communications", "done", "now"])],
+                   {"type": "counts", "x": 8, "y": 0, "w": 8, "h": 2, "opts": {"sections": ["communications", "done"]}})
+        out = self.sent()
+        self.assertNotIn("COMMS-CANARY", out)
+        self.assertNotIn("DONE-CANARY", out)
+        self.assertEqual(set(self.snap()["sections"]), {"now"})
+
+    def test_a_section_no_view_uses_stays_on_the_mac(self):
+        self.views({"type": "list", "x": 0, "y": 0, "w": 8, "h": 8, "opts": {"section": "now"}})
+        out = self.sent()
+        for canary in ("Compare insurance", "Refinish the deck", "WAITING-CANARY"):
+            self.assertNotIn(canary, out)
+
+    def test_a_section_only_counted_sends_no_titles(self):
+        snap = self.snap()
+        self.assertEqual(snap["sections"]["waiting on"]["open"], 1)
+        self.assertNotIn("items", snap["sections"]["waiting on"])
+        self.assertNotIn("WAITING-CANARY", self.sent())
+
+    def test_titles_off_sends_no_title_anywhere(self):
+        for value in (False, None, "yes", 1):   # anything but a plain yes
+            self.config["wall"]["titles"] = value
+            out = self.sent()
+            snap = json.loads(out)
+            self.assertEqual(snap["mode"], "counts")
+            self.assertNotIn("views", snap)
+            for canary in ("Renew the license", "Sweep the porch", "Compare insurance", "Work", "Home"):
+                self.assertNotIn(canary, out)
+            self.assertEqual(snap["sections"]["now"]["open"], 7)
+
+    def test_private_things_are_left_out_and_counted(self):
+        now = self.snap()["sections"]["now"]
+        titles = [i["title"] for i in now["items"]]
+        self.assertEqual(titles, ["Renew the license", "Send the lease back", "Sweep the porch"])
+        self.assertEqual(now["kept_private"], 4)
+        self.assertEqual(now["open"], len(now["items"]) + now["more"] + now["kept_private"])
+
+    def test_numbers_are_unique_across_sections(self):
+        snap = self.snap()
+        numbers = [i["number"] for s in snap["sections"].values() for i in s.get("items", [])]
+        self.assertEqual(len(numbers), len(set(numbers)))
+
+    def test_dates_are_read_and_left_for_the_screen(self):
+        items = {i["title"]: i for i in self.snap()["sections"]["now"]["items"]}
+        self.assertEqual(items["Renew the license"]["due_date"], "2026-11-05")
+        self.assertEqual(items["Send the lease back"]["due"], "Tue 11/3")
+        self.assertEqual(items["Sweep the porch"]["due_date"], "2026-12-25")
+        self.assertEqual(self.wall.due_of(["x", "due 1/4"], dt.date(2026, 12, 20))[1], "2027-01-04")
+        self.assertEqual(self.wall.due_of(["x", "due 13/45"], dt.date(2026, 12, 20)), ("13/45", None))
+
+    def test_a_list_in_a_bad_state_sends_nothing(self):
+        for text in ("", "no sections here at all"):
+            (self.ws / "data/master.md").write_text(text)
+            with self.assertRaises(self.wall.WallError):
+                self.snap()
+        (self.ws / "data/master.md").write_text(self.MASTER)
+        for bad in ("{not json", '{"views": []}', '{"views": [{"name": "x", "layouts": {"landscape": [{"type": "shell", "x": 0, "y": 0, "w": 1, "h": 1}]}}]}',
+                    '{"views": [{"name": "x", "layouts": {"landscape": [{"type": "clock", "x": 20, "y": 0, "w": 9, "h": 1}]}}]}'):
+            (self.ws / "data/wall-views.json").write_text(bad)
+            with self.assertRaises(self.wall.WallError):
+                self.snap()
+
+    def test_it_never_writes_to_the_list(self):
+        before = (self.ws / "data/master.md").read_bytes()
+        self.snap()
+        self.fake_ssh()
+        self.wall.push(self.ws, force=True)
+        self.assertEqual((self.ws / "data/master.md").read_bytes(), before)
+
+    def fake_ssh(self, script=None):
+        """On the PATH in place of ssh: runs the Pi's real receive.py, as the forced command would."""
+        bin_dir = self.ws / "fakebin"
+        bin_dir.mkdir(exist_ok=True)
+        self.run_dir = self.ws / "run"
+        self.run_dir.mkdir(exist_ok=True)
+        self.calls = self.ws / "calls"
+        fake = bin_dir / "ssh"
+        fake.write_text(script or f"""#!/bin/bash
+for last; do :; done
+echo "$last" >> "{self.calls}"
+SSH_ORIGINAL_COMMAND="$last" THESEUS_WALL_RUN="{self.run_dir}" exec /usr/bin/python3 "{ROOT}/apps/wall/pi/receive.py"
+""")
+        fake.chmod(0o755)
+        path = os.environ["PATH"]
+        os.environ["PATH"] = f"{bin_dir}:{path}"
+        self.addCleanup(os.environ.__setitem__, "PATH", path)
+
+    def test_a_delivery_reaches_the_pi_side_and_only_when_something_changed(self):
+        self.fake_ssh()
+        self.assertTrue(self.wall.push(self.ws))
+        got = json.loads((self.run_dir / "wall.json").read_text())
+        self.assertEqual(got["schema"], self.wall.SCHEMA)
+        self.assertEqual(got["sections"]["now"]["items"][0]["title"], "Renew the license")
+        self.assertEqual(len(self.calls.read_text().splitlines()), 1)
+        self.wall.push(self.ws)
+        self.assertEqual(len(self.calls.read_text().splitlines()), 1, "nothing changed, so nothing is sent")
+        (self.ws / "data/master.md").write_text(self.MASTER.replace("Renew the license", "Renew the permit"))
+        self.wall.push(self.ws)
+        self.assertEqual(len(self.calls.read_text().splitlines()), 2)
+        self.assertIn("Renew the permit", (self.run_dir / "wall.json").read_text())
+
+    def test_the_heartbeat_goes_out_even_if_nothing_changed(self):
+        self.fake_ssh()
+        self.wall.push(self.ws)
+        state = json.loads((self.ws / "data/wall-state.json").read_text())
+        state["last_sent"] -= self.wall.HEARTBEAT_SECONDS + 1
+        (self.ws / "data/wall-state.json").write_text(json.dumps(state))
+        self.wall.push(self.ws)
+        self.assertEqual(len(self.calls.read_text().splitlines()), 2)
+
+    def test_a_failed_delivery_says_why_and_tries_again(self):
+        self.fake_ssh('#!/bin/bash\necho "connect: No route to host" >&2\nexit 255\n')
+        self.assertFalse(self.wall.push(self.ws))
+        state = json.loads((self.ws / "data/wall-state.json").read_text())
+        self.assertIn("No route to host", state["last_error"])
+        self.assertNotIn("fingerprint", state)
+
+    def test_nothing_is_sent_when_off(self):
+        self.fake_ssh()
+        for wall in ({"enabled": False, "host": "x"}, {"host": "x"}, None):
+            self.config["wall"] = wall
+            self.save_config()
+            self.assertTrue(self.wall.push(self.ws))
+        self.assertFalse(self.calls.exists())
+
+    def test_setup_refuses_a_host_that_looks_like_an_option(self):
+        for args in (["-oProxyCommand=evil"], ["a b"], [], ["ok.local", "--user", "-x"]):
+            with self.assertRaises(self.wall.WallError):
+                self.wall.setup(self.ws, args)
+
+    def test_setup_sends_the_kit_and_turns_on_only_after_it_works(self):
+        home = self.ws / "home"
+        home.mkdir()
+        old_home = os.environ["HOME"]
+        os.environ["HOME"] = str(home)
+        self.addCleanup(os.environ.__setitem__, "HOME", old_home)
+        self.fake_ssh(f"""#!/bin/bash
+for last; do :; done
+if [[ "$last" == receive || "$last" == clear ]]; then SSH_ORIGINAL_COMMAND="$last" THESEUS_WALL_RUN="{self.ws}/run" exec /usr/bin/python3 "{ROOT}/apps/wall/pi/receive.py"; fi
+echo "$last" > "{self.ws}/remote"; cat > "{self.ws}/kit.tgz"; exit "${{FAKE_SETUP_EXIT:-0}}"
+""")
+        launchctl = self.ws / "fakebin/launchctl"
+        launchctl.write_text(f'#!/bin/bash\necho "$@" >> "{self.ws}/launchctl"\n')
+        launchctl.chmod(0o755)
+        self.config = {}
+        self.save_config()
+
+        os.environ["FAKE_SETUP_EXIT"] = "1"
+        self.addCleanup(os.environ.pop, "FAKE_SETUP_EXIT", None)
+        with self.assertRaises(self.wall.WallError):
+            self.wall.setup(self.ws, ["screen.local"])
+        self.assertNotIn("wall", json.loads((self.ws / "config.json").read_text()), "a failed setup turns nothing on")
+        os.environ["FAKE_SETUP_EXIT"] = "0"
+
+        self.wall.setup(self.ws, ["screen.local", "--user", "me"])
+        wall = json.loads((self.ws / "config.json").read_text())["wall"]
+        self.assertEqual((wall["enabled"], wall["host"], wall["titles"]), (True, "screen.local", False), "titles stay off when nobody can answer")
+        self.assertEqual(json.loads((self.ws / "run/wall.json").read_text())["mode"], "counts")
+        self.assertIn("ssh-ed25519", (self.ws / "remote").read_text())
+        self.assertEqual(((self.ws / ".wall").stat().st_mode & 0o777), 0o700)
+        listing = subprocess.run(["tar", "-tzf", str(self.ws / "kit.tgz")], capture_output=True, text=True).stdout
+        self.assertIn("pi/receive.py", listing)
+        self.assertIn("display/wall.js", listing)
+        self.assertNotIn("prototype", listing)
+        self.assertIn("bootstrap", (self.ws / "launchctl").read_text())
+        self.assertTrue((home / "Library/LaunchAgents/com.theseus.wall.plist").exists())
+
+        self.wall.off(self.ws)
+        self.assertFalse((home / "Library/LaunchAgents/com.theseus.wall.plist").exists())
+        self.assertIs(json.loads((self.ws / "config.json").read_text())["wall"]["enabled"], False)
+        self.assertFalse((self.ws / "run/wall.json").exists(), "off clears the screen")
+
+    def test_the_pi_installer_at_least_parses_and_needs_a_real_key(self):
+        path = ROOT / "apps/wall/pi/install.sh"
+        self.assertEqual(subprocess.run(["bash", "-n", str(path)]).returncode, 0)
+        source = path.read_text()
+        self.assertIn('restrict,command="%s/pi/receive.py"', source)
+        self.assertIn("PasswordAuthentication no", source)
+
+    def test_active_hours_are_a_setting_and_sent_to_the_screen(self):
+        self.assertEqual(self.wall.clock_time("6am"), "06:00")
+        self.assertEqual(self.wall.clock_time("12a"), "00:00")
+        self.assertEqual(self.wall.clock_time("12pm"), "12:00")
+        self.assertEqual(self.wall.clock_time("6:30pm"), "18:30")
+        self.assertEqual(self.wall.clock_time("00:00"), "00:00")
+        for bad in ("25", "13pm", "0am", "6:99", "noon", ""):
+            self.assertIsNone(self.wall.clock_time(bad), bad)
+        self.config["schedule"] = {"groups": [{"days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "wake": "07:00", "bed": "23:00"}], "flex_hours": 1}
+        self.assertEqual(self.snap()["display"], {"on": "07:00", "off": "00:00"}, "your schedule until you set them")
+        self.fake_ssh()
+        self.wall.set_hours(self.ws, ["6am", "12am"])
+        self.assertEqual(self.snap()["display"], {"on": "06:00", "off": "00:00"})
+        self.wall.set_hours(self.ws, ["always"])
+        self.assertIsNone(self.snap()["display"])
+        for bad in (["6am"], ["6am", "6am"], ["6am", "nope"]):
+            with self.assertRaises(self.wall.WallError):
+                self.wall.set_hours(self.ws, bad)
+        self.config["wall"]["titles"] = False
+        self.wall.set_hours(self.ws, ["8am", "8pm"])
+        self.assertEqual(self.snap()["display"], {"on": "08:00", "off": "20:00"}, "counts mode keeps its hours")
+
+    def test_bad_active_hours_send_nothing(self):
+        for hours in ('"sometimes"', '{"from": "25:00", "to": "06:00"}', '{"from": "06:00"}', '{"from": "06:00", "to": "06:00"}'):
+            (self.ws / "data/wall-views.json").write_text('{"active_hours": %s, "views": [{"name": "x", "layouts": {}}]}' % hours)
+            with self.assertRaises(self.wall.WallError):
+                self.snap()
+
+    def cli(self, *args, stdin=""):
+        env = {**os.environ, "THESEUS_HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "cli.py"), "wall", *args], capture_output=True, text=True, env=env, input=stdin, timeout=60)
+
+    def test_the_commands_as_you_would_run_them(self):
+        self.config["wall"] = {"titles": True}
+        self.save_config()
+        status = self.cli("status")
+        self.assertEqual(status.returncode, 0)
+        self.assertIn("is off", status.stdout)
+        self.assertEqual(self.cli().stdout, status.stdout, "plain `theseus wall` is status")
+        shown = json.loads(self.cli("show").stdout)
+        self.assertEqual(shown["sections"]["now"]["items"][0]["title"], "Renew the license")
+        self.assertEqual(self.cli("push").returncode, 0, "nothing to do while it's off")
+        self.assertFalse((self.ws / "data/wall-state.json").exists())
+        for args in (["nope"], ["titles"], ["titles", "maybe"], ["hours"], ["push", "now"], ["show", "x"]):
+            bad = self.cli(*args)
+            self.assertNotEqual(bad.returncode, 0, args)
+            self.assertIn("Usage", bad.stderr, args)
+        self.assertIn("Usage", self.cli("hours", "6am").stderr)
+        self.assertEqual(self.cli("titles", "off").returncode, 0)
+        self.assertEqual(json.loads((self.ws / "config.json").read_text())["wall"]["titles"], False)
+        self.assertEqual(self.cli("hours", "6am", "12am").returncode, 0)
+        self.assertEqual(json.loads((self.ws / "data/wall-views.json").read_text())["active_hours"], {"from": "06:00", "to": "00:00"})
+        self.assertEqual(json.loads(self.cli("show").stdout)["display"], {"on": "06:00", "off": "00:00"})
+        (self.ws / "config.json").write_text("{broken")
+        broken = self.cli("show")
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn("config.json", broken.stderr)
+        self.assertNotIn("Traceback", broken.stderr)
+
+    def test_a_change_the_screen_did_not_get_is_not_claimed(self):
+        self.fake_ssh('#!/bin/bash\necho "connect: No route to host" >&2\nexit 255\n')
+        for args in (["titles", "off"], ["hours", "6am", "8pm"], ["view", "board"]):
+            out = self.cli_with_fake(*args)
+            self.assertEqual(out.returncode, 0, args)
+            self.assertIn("didn't get", out.stdout + out.stderr, args)
+        (self.ws / "data/wall-views.json").unlink()
+
+    def cli_with_fake(self, *args):
+        env = {**os.environ, "THESEUS_HOME": str(self.ws), "PYTHONDONTWRITEBYTECODE": "1"}
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "cli.py"), "wall", *args], capture_output=True, text=True, env=env, timeout=60)
+
+    def test_the_background_job_is_a_valid_launch_agent(self):
+        if not shutil.which("plutil"):
+            self.skipTest("macOS only")
+        home = self.ws / "home"
+        home.mkdir()
+        old = os.environ["HOME"]
+        os.environ["HOME"] = str(home)
+        self.addCleanup(os.environ.__setitem__, "HOME", old)
+        self.fake_ssh()
+        fake = self.ws / "fakebin/launchctl"
+        fake.write_text(f'#!/bin/bash\necho "$@" >> "{self.ws}/launchctl"\n')
+        fake.chmod(0o755)
+        self.wall.install_agent(self.ws)
+        plist = home / "Library/LaunchAgents/com.theseus.wall.plist"
+        self.assertEqual(subprocess.run(["plutil", "-lint", str(plist)], capture_output=True).returncode, 0)
+        import plistlib
+        job = plistlib.loads(plist.read_bytes())
+        self.assertEqual(job["ProgramArguments"][1], str(TOOLS / "wall.py"))
+        self.assertEqual(job["EnvironmentVariables"], {"THESEUS_HOME": str(self.ws)})
+        self.assertEqual(job["StartInterval"], 30)
+        self.assertEqual(job["StandardOutPath"], "/dev/null", "nothing about your list goes in a log")
+
+    def test_a_host_identity_change_is_explained_and_never_accepted(self):
+        self.fake_ssh('#!/bin/bash\necho "@@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@@" >&2\necho "Host key verification failed." >&2\nexit 255\n')
+        self.assertFalse(self.wall.push(self.ws))
+        said = json.loads((self.ws / "data/wall-state.json").read_text())["last_error"]
+        self.assertIn("identity", said.lower())
+        self.assertIn("ssh-keygen -R", said)
+
+    def test_turning_off_works_without_launchctl(self):
+        from unittest import mock
+        home = self.ws / "home"
+        home.mkdir()
+        old = os.environ["HOME"]
+        os.environ["HOME"] = str(home)
+        self.addCleanup(os.environ.__setitem__, "HOME", old)
+        self.fake_ssh()
+        with mock.patch.object(self.wall.subprocess, "run", side_effect=FileNotFoundError("launchctl")):
+            self.assertEqual(self.wall.launchctl("list").returncode, 1)
+            self.wall.remove_agent()
+
+    def test_the_key_stays_out_of_reach(self):
+        self.assertIn("Read(.wall/**)", json.loads((ROOT / "engine/templates/settings.json").read_text())["permissions"]["deny"])
+
+
+class WallReceive(unittest.TestCase):
+    """What the Pi accepts. Its key can do nothing else, so this is the whole door."""
+
+    def setUp(self):
+        self.run_dir = Path(tempfile.mkdtemp(prefix="theseus-receive-"))
+        self.addCleanup(shutil.rmtree, self.run_dir, True)
+        self.good = {"schema": 1, "generated_at": "2026-11-05T08:00:00", "mode": "titles", "sections": {"now": {"open": 1, "items": [{"number": 1, "title": "x"}]}},
+                     "views": [{"name": "v", "layouts": {"landscape": [{"type": "clock", "x": 0, "y": 0, "w": 2, "h": 2}]}}]}
+
+    def send(self, data, command="receive"):
+        raw = data if isinstance(data, bytes) else json.dumps(data).encode()
+        env = {**os.environ, "THESEUS_WALL_RUN": str(self.run_dir), "SSH_ORIGINAL_COMMAND": command}
+        return subprocess.run(["/usr/bin/python3", str(ROOT / "apps/wall/pi/receive.py")], input=raw, capture_output=True, env=env).returncode
+
+    def test_a_good_one_is_kept(self):
+        self.assertEqual(self.send(self.good), 0)
+        self.assertEqual(json.loads((self.run_dir / "wall.json").read_text()), self.good)
+
+    def test_anything_else_is_refused_and_the_last_good_list_stays(self):
+        self.send(self.good)
+        too_big = dict(self.good, note="x" * (300 * 1024))
+        wrong_piece = json.loads(json.dumps(self.good))
+        wrong_piece["views"][0]["layouts"]["landscape"][0]["type"] = "script"
+        off_grid = json.loads(json.dumps(self.good))
+        off_grid["views"][0]["layouts"]["landscape"][0]["x"] = 99
+        titles_in_counts = dict(self.good, mode="counts")
+        bad_hours = dict(self.good, display={"on": "6am", "off": "00:00"})
+        for bad in (b"not json", b"[]", {"schema": 2}, dict(self.good, schema=99), too_big, wrong_piece, off_grid, titles_in_counts, bad_hours):
+            self.assertNotEqual(self.send(bad), 0)
+            self.assertEqual(json.loads((self.run_dir / "wall.json").read_text()), self.good)
+
+    def test_the_key_can_do_nothing_but_deliver_or_clear(self):
+        for command in ("bash", "cat /etc/passwd", "receive; rm -rf /", "scp -t /"):
+            self.assertNotEqual(self.send(self.good, command), 0, command)
+        self.send(self.good)
+        self.assertEqual(self.send(b"", "clear"), 0)
+        self.assertFalse((self.run_dir / "wall.json").exists())
+        self.assertEqual(self.send(b"", "clear"), 0, "clearing twice is fine")
+
+    def test_the_tv_sleeps_and_wakes_only_when_the_hours_change_over(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("wall_power", ROOT / "apps/wall/pi/power.py")
+        power = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(power)
+        power.RUN = self.run_dir
+        told = []
+        power.tell_tv = told.append
+        hours = {"on": "06:00", "off": "00:00"}
+        at = lambda h, m=0: dt.datetime(2026, 11, 5, h, m)
+        self.assertEqual([power.wanted(hours, at(h, m)) for h, m in ((5, 59), (6, 0), (23, 59), (0, 0), (0, 30))], ["off", "on", "on", "off", "off"])
+        self.assertEqual(power.wanted({"on": "09:00", "off": "17:00"}, at(17)), "off")
+        self.assertIsNone(power.wanted(None, at(12)))
+
+        power.main(at(12))
+        self.assertEqual(told, [], "no snapshot yet, so nothing happens")
+        (self.run_dir / "wall.json").write_text(json.dumps({"display": hours}))
+        power.main(at(12))
+        power.main(at(13))
+        self.assertEqual(told, ["on"])
+        power.main(at(0, 1))
+        power.main(at(2))   # someone switching the TV on at 2am keeps it on
+        self.assertEqual(told, ["on", "off"])
+        power.main(at(6))
+        self.assertEqual(told, ["on", "off", "on"])
+        (self.run_dir / "wall.json").write_text(json.dumps({"display": None}))
+        power.main(at(1))
+        self.assertEqual(told, ["on", "off", "on"], "always on leaves the TV alone")
+
+    def test_the_hdmi_commands_are_the_ones_in_the_manual(self):
+        import importlib.util
+        from unittest import mock
+        spec = importlib.util.spec_from_file_location("wall_power2", ROOT / "apps/wall/pi/power.py")
+        power = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(power)
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0", "/dev/cec1"]), mock.patch.object(power.subprocess, "run") as run:
+            power.tell_tv("off")
+        self.assertEqual([c.args[0] for c in run.call_args_list], [["cec-ctl", "-d", d, *a] for d in ("/dev/cec0", "/dev/cec1") for a in (["--playback"], ["--to", "0", "--standby"])])
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0"]), mock.patch.object(power.subprocess, "run") as run:
+            power.tell_tv("on")
+        self.assertEqual(run.call_args_list[-1].args[0], ["cec-ctl", "-d", "/dev/cec0", "--to", "0", "--image-view-on"])
+        with mock.patch.object(power.glob, "glob", return_value=["/dev/cec0"]), mock.patch.object(power.subprocess, "run", side_effect=OSError("no cec-ctl")):
+            power.tell_tv("on")   # a Pi without it just stays black
+        (self.run_dir / "wall.json").write_text("half a fi")
+        power.RUN = self.run_dir
+        power.main(dt.datetime(2026, 11, 5, 12))   # a damaged snapshot does nothing
+
+    def test_the_screen_waits_for_its_page(self):
+        source = (ROOT / "apps/wall/pi/install.sh").read_text()
+        self.assertIn("ExecStartPre=", source, "a browser that starts first shows an error page forever")
+        self.assertRegex(source, r"apt-get install[^\n]*\bxwayland\b", "cage won't start without it")
+        self.assertIn("restart --no-block theseus-wall-screen.service", source, "a slow browser must not fail the whole install; the service retries by itself")
+        self.assertIn("StandardInput=tty-fail", source, "waiting for a held terminal hangs the screen with no error")
+        self.assertIn("AccuracySec=1s", source, "or systemd may run the once-a-minute job up to a minute late")
+
+    def test_the_page_can_only_talk_to_this_pi(self):
+        serve = (ROOT / "apps/wall/pi/serve.py").read_text()
+        self.assertIn('("127.0.0.1", PORT)', serve)
+        self.assertIn("default-src 'none'", serve)
+        display = ROOT / "apps/wall/display"
+        for name in ("index.html", "wall.js", "wall.css"):
+            self.assertNotRegex((display / name).read_text(), r"https?://(?!www\.w3\.org)", name)
+        self.assertNotIn("innerHTML", (display / "wall.js").read_text())
+
+
+class WallDefaults(unittest.TestCase):
+    def test_a_new_screen_starts_on_sectors(self):
+        sys.path.insert(0, str(TOOLS))
+        import wall
+        views = wall.start_views()
+        self.assertEqual(views["change"], {"mode": "fixed", "minutes": 5, "active": "Sectors"})
+        self.assertEqual(views["views"][0]["name"], "Sectors")
+
+
 class Versions(unittest.TestCase):
     def test_everything_says_the_same_version(self):
         v = (ROOT / "engine/VERSION").read_text().strip()

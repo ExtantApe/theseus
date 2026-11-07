@@ -110,15 +110,14 @@ iPhone Shortcut instructions (optional) → `/migrate` (shown as a guided review
 | **M2** (partly: the app owns permissions and hosts the schedule. Still to come: native EventKit) | Background agent (app LaunchAgent) replaces the launchd scripts; native EventKit; permissions owned by the app | no Terminal needed after install |
 | **M3** (partly: List with drag and undo shipped. Still to come: Rank, Replies, Settings) | Main window: List (drag-rank), Rank cards, Replies questionnaire, Settings with the Schedule editor | full feature parity with the plugin |
 | **M4** | First-run wizard, unsigned DMG release, docs, a 5-person private beta | a non-technical friend installs it alone |
-| **M6** | **Command center**: a wall or desk display served by the Mac on the home network (Raspberry Pi in browser kiosk mode, or a MagicMirror² module reading `wall.json`); landscape and portrait layouts; wall-safe by default; last snapshot shown if the Mac sleeps | glanceable all day, nothing private visible to passers-by |
-| **M7** | **Voice and family (optional)**: on-Pi wake word and fixed commands ("show the family", "show <name>", "in detail", "back"); "in detail" needs confirmation on the person's watch or phone and expires in ~30 s; per-person opt-in profiles; a Family view (week, chores, groceries, dinner, countdowns) for homes without Skylight | a household can share one wall, with each person in control of their own data |
+| **M6** (in progress: ADR 0008, `docs/design/wall-display.md`) | **Wall display**: the Mac sends a filtered `wall.json` to a Raspberry Pi in browser kiosk mode (or a MagicMirror² module reading it); landscape and portrait layouts; counts only until you choose titles; last snapshot shown if the Mac sleeps | glanceable all day, and you decide what passers-by can see |
+| **M7** | **Family (optional)**: per-person opt-in profiles and a Family view (week, chores, groceries, dinner, countdowns) for homes without Skylight | a household can share one wall, with each person in control of their own data |
 | **M5** | API-key mode, auto-updates, Swift ports of tools (drop Python), optional notarization, public release | public 1.0 |
 
 ## 6b. Data rules to keep now (so M6 and M7 drop in later)
 - Each person = their own workspace and profile. A household layer only combines what each person marks shareable.
-- Every item gets a `visibility`: `private` (never on a wall) · `wall-safe` (title-less summary, counts) · `wall-detail` (full title, only after confirmation).
+- What reaches a wall is decided per screen, not per item (ADR 0008): sections your views use, minus private categories, with titles off until you choose. Per-item `visibility` can come with M7 if a shared household needs it.
 - Message content, email and private contacts are never wall-visible, at any level.
-- Voice is never authentication. Sensitive views need a second factor from that person.
 
 ## 7. Risks and open questions
 - **Anthropic's rules for third-party apps are evolving.** Keep the "Use my Claude Code" mode minimal (launch the user's own CLI, never
