@@ -1047,6 +1047,18 @@ echo "$last" > "{self.ws}/remote"; cat > "{self.ws}/kit.tgz"; exit "${{FAKE_SETU
         self.assertIn("identity", said.lower())
         self.assertIn("ssh-keygen -R", said)
 
+    def test_turning_off_works_without_launchctl(self):
+        from unittest import mock
+        home = self.ws / "home"
+        home.mkdir()
+        old = os.environ["HOME"]
+        os.environ["HOME"] = str(home)
+        self.addCleanup(os.environ.__setitem__, "HOME", old)
+        self.fake_ssh()
+        with mock.patch.object(self.wall.subprocess, "run", side_effect=FileNotFoundError("launchctl")):
+            self.assertEqual(self.wall.launchctl("list").returncode, 1)
+            self.wall.remove_agent()
+
     def test_the_key_stays_out_of_reach(self):
         self.assertIn("Read(.wall/**)", json.loads((ROOT / "engine/templates/settings.json").read_text())["permissions"]["deny"])
 

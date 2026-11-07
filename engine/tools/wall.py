@@ -328,7 +328,10 @@ def agent_path():
 
 
 def launchctl(*args):
-    return subprocess.run([shutil.which("launchctl") or "/bin/launchctl", *args], capture_output=True)
+    try:
+        return subprocess.run([shutil.which("launchctl") or "/bin/launchctl", *args], capture_output=True)
+    except OSError as e:  # nothing here can run launch agents, so there's nothing to start or stop
+        return subprocess.CompletedProcess(args, 1, b"", str(e).encode())
 
 
 def install_agent(ws):
