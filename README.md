@@ -94,15 +94,15 @@ A menu bar app that keeps everything running: Remote Control, the checks and you
 It's also the nicest way to work your list. Drag things into order, check them off with a few seconds to change your mind, or edit it as plain Markdown. It saves as you go, with undo. Activity shows your thread notes, and Setup lists every command.
 
 1. Download the `.dmg` from [Releases](https://github.com/ExtantApe/theseus/releases/latest) and drag Theseus to Applications.
-2. Apple charges for notarizing and Theseus is free, so it isn't notarized and macOS blocks the first launch. There are two ways to allow it:
+2. Apple charges for notarizing and Theseus is free, so it isn't notarized and macOS blocks the first launch. There are two ways to allow it. Apple says to do this only for an app you trust.
 
-   **Terminal (quickest):**
+   **System Settings:** try to open Theseus once and close the warning. Then go to **System Settings → Privacy & Security**, scroll down, click **Open Anyway**, and click **Open** when the warning comes back.
+
+   **Or Terminal:** this lifts the block for Theseus only.
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Theseus.app"
    ```
-
-   **Or System Settings:** open the app and dismiss the warning, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway**.
 
 Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
 

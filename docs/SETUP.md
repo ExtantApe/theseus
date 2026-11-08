@@ -257,15 +257,15 @@ A menu bar app that hosts Remote Control, the change checks and your briefings, 
 It runs the engine in your workspace, so install Theseus first.
 
 1. Download the `.dmg` from [Releases](https://github.com/ExtantApe/theseus/releases/latest) and drag Theseus to Applications.
-2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. Allow it one of two ways:
+2. Theseus is free and isn't notarized by Apple (Apple charges for that), so macOS blocks the first launch. There are two ways to allow it. Apple says to do this only for an app you trust.
 
-   **Terminal (quickest):**
+   **System Settings:** try to open Theseus once and close the warning. Then go to **System Settings → Privacy & Security**, scroll down, click **Open Anyway**, and click **Open** when the warning comes back.
+
+   **Or Terminal:** this lifts the block for Theseus only.
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Theseus.app"
    ```
-
-   **Or System Settings:** open the app and dismiss the warning, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway**.
 
 Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line tools (`xcode-select --install`).
 

@@ -97,7 +97,7 @@ iPhone Shortcut instructions (optional) → `/migrate` (shown as a guided review
 ## 5. Shipping
 - **One repo, one release:** GitHub Releases attach `Theseus.dmg` (the app with the engine inside) plus the plugin marketplace files
   (for Claude Code users). Same version number for both.
-- **Before notarization:** unsigned builds with clear "Open Anyway" instructions (docs/SETUP.md §11), or build from source in Xcode.
+- **Before notarization:** builds with clear "Open Anyway" and Terminal instructions (README and docs/SETUP.md), or build from source in Xcode.
 - **Later (optional):** an Apple Developer ID for signing and notarization ($99/yr). Only if enough people want one-click installs.
 - **Updates:** Tauri updater + `latest.json` on GitHub Releases, signed with the updater key (as in OnePedigree). Engine-only updates can ship without a new app binary.
 - **Uninstall:** Settings → "Remove Theseus" unregisters the agent and leaves the workspace in place (or exports, then deletes it, if the user chooses).
