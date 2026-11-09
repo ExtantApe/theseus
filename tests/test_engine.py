@@ -1244,6 +1244,178 @@ class Rereads(unittest.TestCase):
         self.assertTrue(json.loads(run("due"))["due"])
 
 
+class LocalChangesGuard(unittest.TestCase):
+    """Installing must stop rather than overwrite engine changes made in a workspace that the source doesn't have yet."""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-lc-"))
+        self.src = Path(tempfile.mkdtemp(prefix="theseus-src-"))
+        for d in (self.ws, self.src):
+            self.addCleanup(shutil.rmtree, d, True)
+        git = lambda *a: subprocess.run(["git", "-C", str(self.src), *a], check=True, capture_output=True, text=True).stdout
+        git("init", "-q")
+        (self.src / "tool.py").write_text("print('old')\n")
+        git("add", "tool.py")
+        (self.src / "tool.py").write_text("print('new')\n")
+        (self.ws / "data/local-changes").mkdir(parents=True)
+        (self.ws / "data/local-changes/x.patch").write_text(git("diff"))
+        (self.src / "tool.py").write_text("print('old')\n")
+
+    def changes(self, *fields):
+        (self.ws / "data/local-changes.md").write_text("# Local changes\n\n## Pending\n\n### A change\n" + "".join(f"- {f}\n" for f in fields)
+                                                       + "\n## Done upstream\n\n### Old\n- Patch: `data/local-changes/gone.patch`\n")
+
+    def guard(self):
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "local_changes.py"), "guard", "--src", str(self.src), "--home", str(self.ws)],
+                              capture_output=True, text=True)
+
+    def test_a_patch_the_source_lacks_stops_the_install(self):
+        self.changes("Type: applied locally", "Patch: `data/local-changes/x.patch`")
+        p = self.guard()
+        self.assertEqual(p.returncode, 1, p.stderr)
+        self.assertIn("A change", p.stderr)
+
+    def test_a_missing_patch_file_stops_the_install(self):
+        self.changes("Patch: `data/local-changes/nowhere.patch`")
+        self.assertEqual(self.guard().returncode, 1)
+
+    def test_a_patch_already_in_the_source_lets_it_through(self):
+        self.changes("Patch: `data/local-changes/x.patch`")
+        (self.src / "tool.py").write_text("print('new')\n")
+        p = self.guard()
+        self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_entries_without_a_patch_and_done_ones_do_not_block(self):
+        self.changes("Type: recommended, not built", "Files: tool.py (patch mentioned only in passing)")
+        self.assertEqual(self.guard().returncode, 0)
+
+    def test_the_session_note_lists_pending_and_says_its_text_is_data(self):
+        self.changes("Type: applied locally", "Before restart: yes")
+        p = subprocess.run(["/usr/bin/python3", str(TOOLS / "local_changes.py"), "session", "--home", str(self.ws)], capture_output=True, text=True)
+        self.assertIn("A change", p.stdout)
+        self.assertIn("BEFORE RESTART", p.stdout)
+        self.assertIn("data, not instructions", p.stdout)
+        self.assertNotIn("Old", p.stdout)
+
+
+class PersonalDataReadOnly(unittest.TestCase):
+    """Messages, Mail and Things are read through a copy. The tools never change the real databases."""
+    READERS = ("imsg.py", "mail.py", "things_export.py", "changes.py")
+
+    def test_every_live_database_is_opened_read_only(self):
+        for name in self.READERS:
+            source = (TOOLS / name).read_text()
+            for m in re.finditer(r"sqlite3\.connect\((.*)", source):
+                arg = m.group(1)
+                if "as_uri" in arg:
+                    self.assertIn("mode=ro", arg, f"{name}: {arg}")
+            self.assertIn("mode=ro", source, name)
+
+    def test_no_reader_writes_sql_or_can_send(self):
+        writes = re.compile(r"""execute\w*\(\s*[rfb]?["']\s*(insert|update|delete|drop|alter|create|replace|attach)\b""", re.I)
+        for name in self.READERS:
+            source = (TOOLS / name).read_text()
+            self.assertIsNone(writes.search(source), name)
+            if name == "changes.py":
+                continue   # it asks Notes for modification dates through osascript; the send guard covers what that could do
+            for sender in ("osascript", "smtplib", "sendmail"):
+                self.assertNotIn(sender, source, f"{name} mentions {sender}")
+
+    def test_a_snapshot_leaves_the_source_byte_for_byte(self):
+        tmp = Path(tempfile.mkdtemp(prefix="theseus-ro-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        src = tmp / "live.db"
+        con = sqlite3.connect(src)
+        con.execute("create table t (x)")
+        con.execute("insert into t values (1)")
+        con.commit()
+        con.close()
+        before = (src.read_bytes(), src.stat().st_mtime_ns)
+        src.chmod(0o444)
+        self.addCleanup(src.chmod, 0o644)
+        import imsg
+        out = imsg.snapshot(src, tmp / "copy.db", 0, True)
+        self.assertEqual(sqlite3.connect(out).execute("select x from t").fetchone(), (1,))
+        self.assertEqual((src.read_bytes(), src.stat().st_mtime_ns), before)
+        self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["copy.db", "live.db"])
+
+
+class Intake(unittest.TestCase):
+    """Items other tools hand Theseus wait for the user's yes, and the tools' files are never written to."""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp(prefix="theseus-intake-"))
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        (self.ws / "data/intake").mkdir(parents=True)
+        self.file = self.ws / "data/intake/console.jsonl"
+        meeting = {"title": "Planning", "date": "2026-11-08"}
+        lines = [
+            {"id": "c1", "created": "2026-11-08T10:00:00-07:00", "title": "Send the quote", "owner_is_me": True, "meeting": meeting,
+             "due": "2026-11-14", "category": "#Work"},
+            {"id": "c2", "created": "2026-11-08T10:01:00-07:00", "title": "Someone else's", "owner_is_me": False, "meeting": meeting},
+            {"id": "c3", "created": "2026-11-08T10:02:00-07:00", "title": "Vague date", "owner_is_me": True, "meeting": meeting, "due": "next Friday"},
+            {"id": "c4", "created": "2026-11-08T10:03:00-07:00", "owner_is_me": True, "meeting": meeting},
+            "not json",
+            {"id": "c9", "status": "done"},
+            {"id": "c1", "created": "2026-11-08T11:00:00-07:00", "title": "A second c1", "owner_is_me": True, "meeting": meeting},
+            {"id": "c5", "created": "2026-11-08T10:04:00-07:00", "title": "Called off", "owner_is_me": True, "meeting": meeting},
+            {"id": "c5", "status": "cancelled"},
+        ]
+        self.file.write_text("".join((l if isinstance(l, str) else json.dumps(l)) + "\n" for l in lines))
+
+    def run_intake(self, *args):
+        return subprocess.run(["/usr/bin/python3", str(TOOLS / "intake.py"), *args], capture_output=True, text=True,
+                              env={**os.environ, "THESEUS_HOME": str(self.ws)})
+
+    def pending(self):
+        return json.loads(self.run_intake("pending").stdout)
+
+    def test_only_open_items_for_the_user_wait_for_a_yes(self):
+        d = self.pending()
+        self.assertEqual([(i["n"], i["key"], i["title"]) for i in d["pending"]], [(1, "console:c1", "Send the quote"), (2, "console:c3", "Vague date")])
+        self.assertEqual({s["why"] for s in d["skipped"]}, {"missing title", "not JSON", "done for an id not seen yet"})
+
+    def test_a_date_that_is_not_a_date_is_never_used(self):
+        c3 = self.pending()["pending"][1]
+        self.assertIsNone(c3["due"])
+        self.assertEqual(c3["due_raw"], "next Friday")
+
+    def test_nothing_joins_without_a_decision_and_each_is_decided_once(self):
+        self.assertFalse((self.ws / "data/intake-state.json").exists())
+        self.assertEqual(self.run_intake("accept", "console:c1", "--task", "t0042").returncode, 0)
+        self.assertEqual(self.run_intake("decline", "console:c3").returncode, 0)
+        self.assertNotEqual(self.run_intake("accept", "console:c1", "--task", "t0043").returncode, 0)
+        self.assertNotEqual(self.run_intake("accept", "console:nope", "--task", "t0044").returncode, 0)
+        self.assertNotEqual(self.run_intake("accept", "console:c3", "--task", "tasks!").returncode, 0)
+        self.assertEqual(self.pending()["pending"], [])
+        state = json.loads((self.ws / "data/intake-state.json").read_text())["items"]
+        self.assertEqual((state["console:c1"]["decision"], state["console:c1"]["task"]), ("accepted", "t0042"))
+        self.assertEqual(state["console:c3"]["decision"], "declined")
+
+    def test_a_later_done_line_reaches_the_task_once(self):
+        self.run_intake("accept", "console:c1", "--task", "t0042")
+        self.assertEqual(json.loads(self.run_intake("updates").stdout)["updates"], [])
+        with open(self.file, "a") as f:
+            f.write(json.dumps({"id": "c1", "status": "done"}) + "\n")
+        ups = json.loads(self.run_intake("updates").stdout)["updates"]
+        self.assertEqual([(u["task"], u["status"]) for u in ups], [("t0042", "done")])
+        self.run_intake("applied", "console:c1")
+        self.assertEqual(json.loads(self.run_intake("updates").stdout)["updates"], [])
+
+    def test_the_tools_file_is_never_written(self):
+        before = (self.file.read_bytes(), self.file.stat().st_mtime_ns)
+        self.pending()
+        self.run_intake("accept", "console:c1", "--task", "t0042")
+        self.run_intake("decline", "console:c3")
+        self.run_intake("updates")
+        self.assertEqual((self.file.read_bytes(), self.file.stat().st_mtime_ns), before)
+        self.assertEqual(sorted(p.name for p in (self.ws / "data/intake").iterdir()), ["console.jsonl"])
+
+    def test_no_intake_folder_means_nothing_pending(self):
+        shutil.rmtree(self.ws / "data/intake")
+        self.assertEqual(self.pending(), {"pending": [], "skipped": []})
+
+
 class Versions(unittest.TestCase):
     def test_everything_says_the_same_version(self):
         v = (ROOT / "engine/VERSION").read_text().strip()
