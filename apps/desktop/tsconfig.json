@@ -12,6 +12,7 @@
       "DOM.Iterable"
     ],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": [
       "vite/client"
     ]

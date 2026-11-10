@@ -2,6 +2,21 @@
 
 How the tests line up with what Theseus promises. Redo it after every feature or fix, and at least every 14 days while the repo has commits.
 
+## 2026-11-09 · the Impact view
+
+| Promise | Proved by |
+| --- | --- |
+| The order is low effort/high impact, high/high, low/low, high/low, unrated last; effort comes from the size estimate | `focus.test.ts`: sizes become minutes, tier order, bucket order |
+| Focus holds each category's top item, high impact first, then urgency, then section | `focus.test.ts`: focus ranking, due dates across a new year |
+| Five per bucket; a finished item stays in place and the next joins only when asked | `focus.test.ts` slots; e2e "stays in its place", "waits to be asked for", "Add puts it at the bottom" |
+| The user's rating is marked as theirs and replaces Claude's; clicking again takes it off | `focus.test.ts` setImpact; e2e rating checks |
+| Dragging or Move up/down changes only the view; another bucket changes only the category | e2e "reorders the view only", "leaves the list file alone"; `focus.test.ts` setCategory keeps the item's place |
+| Opening the view changes nothing, and the List view is unchanged | e2e "opening the view changes nothing", "the List view is still there"; the earlier e2e checks still pass |
+| Waiting On, Projects and Done never appear | `focus.test.ts` candidates; e2e "waiting items are left out" |
+| The phone note doesn't show `impact:` fields | `test_list_counts_are_recounted_and_ids_hidden` |
+
+Skipped: keyboard-only drag replacement is the native `<select>` ("Move…"), so its screen-reader behavior is the browser's; the e2e test drives it by value. Claude's rating during /morning and /weekly isn't built yet (waits for the owner's yes), so it has no tests.
+
 ## 2026-11-09 · first audit
 
 What exists: `tests/test_engine.py` (134 tests, stdlib, run by `scripts/ci-checks.sh`), `apps/desktop/src/*.test.ts` (22, `node --test`), 2 Rust tests in the desktop app, the desktop and wall end-to-end runs in CI (`apps/desktop/e2e/ui.mjs`, `apps/wall/e2e.mjs`), and `apps/wall/sim/test_connection.py`. CI also runs the leak check, syntax checks for every script and tool, `swiftc -typecheck` on `ek.swift`, and the shared-file check.

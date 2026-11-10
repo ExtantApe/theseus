@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { ImpactView } from './ImpactUI'
 import { inlineParts } from './inline'
 import { Block, ListTools, useListActions, type ListActions } from './ListUI'
 import { commsSection, dropEmoji, nowSection } from './master'
@@ -139,13 +140,16 @@ export default function App() {
   )
 }
 
+type ListView = 'list' | 'impact' | 'markdown'
+
 function ListPage({ m, a }: { m: Master; a: ListActions }) {
-  const [raw, setRaw] = useState(() => {
-    try { return localStorage.getItem('theseus.listView') === 'markdown' } catch { return false }
+  const [view, setView] = useState<ListView>(() => {
+    try { const v = localStorage.getItem('theseus.listView'); return v === 'markdown' || v === 'impact' ? v : 'list' } catch { return 'list' }
   })
-  const choose = (v: boolean) => {
-    setRaw(v)
-    try { localStorage.setItem('theseus.listView', v ? 'markdown' : 'list') } catch { /* it's only a convenience */ }
+  const raw = view === 'markdown'
+  const choose = (v: ListView) => {
+    setView(v)
+    try { localStorage.setItem('theseus.listView', v) } catch { /* it's only a convenience */ }
   }
   const closedAtFirst = new Set(['eventually', 'done', 'projects', 'figure out'])
   return (
@@ -153,12 +157,15 @@ function ListPage({ m, a }: { m: Master; a: ListActions }) {
       <div className="head">
         <div className="grow">
           <h1>List</h1>
-          <div className="sub">Drag to reorder. Double-click to rename. Everything saves as you go.</div>
+          <div className="sub">{view === 'impact'
+            ? 'Each project’s top five, easiest wins first. Rate impact with one click; effort comes from the size estimate.'
+            : 'Drag to reorder. Double-click to rename. Everything saves as you go.'}</div>
         </div>
         <ListTools m={m} />
         <div className="segmented" role="group" aria-label="View">
-          <button aria-pressed={!raw} onClick={() => choose(false)}><Icon name="list" />List</button>
-          <button aria-pressed={raw} onClick={() => choose(true)}><Icon name="code" />Markdown</button>
+          <button aria-pressed={view === 'list'} onClick={() => choose('list')}><Icon name="list" />List</button>
+          <button aria-pressed={view === 'impact'} onClick={() => choose('impact')}><Icon name="sparkle" />Impact</button>
+          <button aria-pressed={raw} onClick={() => choose('markdown')}><Icon name="code" />Markdown</button>
         </div>
       </div>
       {m.notice && <div className="notice"><Icon name="info" /><div className="grow">{m.notice}</div><button className="btn quiet icon" style={{ height: 22, width: 22 }} aria-label="Dismiss" onClick={m.clearNotice}><Icon name="close" size={14} /></button></div>}
@@ -166,7 +173,8 @@ function ListPage({ m, a }: { m: Master; a: ListActions }) {
       {raw && m.text !== null && (
         <textarea className="md-editor" spellCheck={false} aria-label="Master list as Markdown" value={m.text} onChange={(e) => m.type(e.target.value)} />
       )}
-      {!raw && m.doc?.sections.map((s) => <Block key={s.key} section={s} m={m} a={a} collapsible defaultOpen={!closedAtFirst.has(s.key)} />)}
+      {view === 'impact' && m.text && <ImpactView m={m} a={a} />}
+      {view === 'list' && m.doc?.sections.map((s) => <Block key={s.key} section={s} m={m} a={a} collapsible defaultOpen={!closedAtFirst.has(s.key)} />)}
     </div>
   )
 }

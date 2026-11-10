@@ -183,7 +183,7 @@ def h(t: str) -> str:
 
 # -------------------------------------------------------- markdown → Notes HTML
 
-ID_TOKEN = re.compile(r"\s*·?\s*\b(?:id|was):[\w-]+")
+ID_TOKEN = re.compile(r"\s*·?\s*\b(?:id|was|impact):[\w-]+\*?")
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 

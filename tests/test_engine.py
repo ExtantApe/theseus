@@ -290,11 +290,13 @@ class Workspace(unittest.TestCase):
     def test_list_counts_are_recounted_and_ids_hidden(self):
         code = ("import sys; sys.path.insert(0, %r); import notes\n"
                 "md = '# List\\n_Updated Mon 1/1 6:00am · 9 NOW_\\n\\n## 🔥 NOW\\n- [ ] a · id:t1\\n- [x] b\\n## ⏭ NEXT\\n- [ ] c\\n- [ ] d\\n'\n"
-                "out = notes.fresh_counts(md); print(out.splitlines()[1]); print(notes.md_to_html('- [x] a · was:figure-out · id:t1'))" % str(TOOLS))
+                "out = notes.fresh_counts(md); print(out.splitlines()[1]); print(notes.md_to_html('- [x] a · was:figure-out · impact:high* · ~15m · id:t1'))" % str(TOOLS))
         p = subprocess.run(["/usr/bin/python3", "-c", code], capture_output=True, text=True, env=self.env, cwd=self.ws)
         self.assertIn("· 1 NOW · 2 NEXT_", p.stdout, p.stderr)
         self.assertNotIn("was:", p.stdout)
         self.assertNotIn("id:", p.stdout)
+        self.assertNotIn("impact", p.stdout)
+        self.assertIn("~15m", p.stdout)
 
     def test_search_marks_every_hit_and_separates_only_apart_windows(self):
         code = """import sys, types, argparse, datetime as dt

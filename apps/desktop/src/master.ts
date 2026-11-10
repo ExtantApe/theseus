@@ -2,7 +2,7 @@
  * The master list, data/master.md, as data. Every change in the app is a pure function from text to text, so the list view, the
  * Markdown view and undo all work on the same thing, and lines the app doesn't understand stay exactly as they were.
  */
-export type Chip = { kind: 'category' | 'due' | 'size' | 'reminder' | 'repeat' | 'skylight' | 'link' | 'done' | 'note'; text: string }
+export type Chip = { kind: 'category' | 'due' | 'size' | 'impact' | 'reminder' | 'repeat' | 'skylight' | 'link' | 'done' | 'note'; text: string }
 export type Item = { kind: 'item'; key: string; done: boolean; title: string; id: string | null; chips: Chip[]; repeating: boolean; doneForNow: boolean; line: string; children: string[] }
 export type TextBlock = { kind: 'text'; line: string }
 export type Section = { key: string; heading: string; title: string; blocks: (Item | TextBlock)[] }
@@ -10,6 +10,7 @@ export type Doc = { head: string[]; sections: Section[] }
 
 const ITEM = /^- \[( |x|X)\] (.*)$/
 const SEP = ' · '
+const IMPACT = /^impact:(high|low)\*?$/
 
 /** Section title without its leading emoji or its ": explanation". */
 export function sectionTitle(heading: string) {
@@ -29,6 +30,7 @@ function chipsOf(parts: string[]): { chips: Chip[]; id: string | null; doneForNo
     else if (seg.startsWith('#')) chips.push({ kind: 'category', text: seg.slice(1) })
     else if (/^due\b/.test(seg)) chips.push({ kind: 'due', text: seg.slice(3).trim() })
     else if (/^~\d/.test(seg)) chips.push({ kind: 'size', text: seg.slice(1) })
+    else if (IMPACT.test(seg)) chips.push({ kind: 'impact', text: seg.slice(7) }) // "high", or "high*" when the user set it
     else if (/^done for now\b/.test(seg)) doneForNow = true
     else if (/^done\b/.test(seg)) chips.push({ kind: 'done', text: seg.slice(4).trim() })
     else if (seg.startsWith('↻')) { repeating = true; chips.push({ kind: 'repeat', text: seg.slice(1).trim() }) }
@@ -200,6 +202,35 @@ export function editTitle(md: string, key: string, title: string) {
   const hit = findItem(doc, key)
   if (!hit) return md
   setLine(hit.item, (mark, parts) => [mark, [clean, ...parts.slice(1)]])
+  return serialize(doc)
+}
+
+/**
+ * The user's own impact rating, written `impact:high*`: the star means the user chose it, so Claude never changes it.
+ * null takes the rating off, and then Claude may suggest one again.
+ */
+export function setImpact(md: string, key: string, level: 'high' | 'low' | null) {
+  const doc = parse(md)
+  const hit = findItem(doc, key)
+  if (!hit) return md
+  setLine(hit.item, (mark, parts) => {
+    const rest = parts.filter((p, i) => i === 0 || !IMPACT.test(p.trim()))
+    return [mark, level ? withSegment(rest, `impact:${level}*`) : rest]
+  })
+  return serialize(doc)
+}
+
+/** Moves an item to another category. Its place in the list stays the same. */
+export function setCategory(md: string, key: string, category: string) {
+  const clean = category.replace(/^#/, '').replace(/[^\p{L}\p{N}_-]/gu, '')
+  const doc = parse(md)
+  const hit = findItem(doc, key)
+  if (!clean || !hit) return md
+  setLine(hit.item, (mark, parts) => {
+    const at = parts.findIndex((p, i) => i > 0 && p.trim().startsWith('#'))
+    if (at < 0) return [mark, [parts[0], `#${clean}`, ...parts.slice(1)]]
+    return [mark, parts.map((p, i) => (i === at ? `#${clean}` : p))]
+  })
   return serialize(doc)
 }
 
