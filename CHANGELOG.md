@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2
 - **An Impact view in the app, next to List and Markdown.** One bucket per category, each showing its best five: low effort and high impact first, then high/high, low/low and high effort with low impact. Effort comes from the size estimate, and you rate impact with one click. A Focus column holds the top item from each category, most imperative first. Something you finish there stays in place, marked completed, and the next one joins only when you ask. Drag to reorder a bucket, or drag (or use Move…) to put an item in another category. The List view hasn't changed.
 - **Other tools can hand Theseus items for your yes.** `engine/tools/intake.py` reads what they leave in `data/intake/`; nothing joins your list until you accept it.
 

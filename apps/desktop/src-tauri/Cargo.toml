@@ -1,6 +1,6 @@
 [package]
 name = "theseus"
-version = "0.6.1"
+version = "0.6.2"
 description = "Theseus for Mac"
 authors = ["Theseus contributors"]
 license = "MIT"
