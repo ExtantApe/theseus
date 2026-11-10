@@ -1,7 +1,7 @@
 {
   "name": "theseus-desktop",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "type": "module",
   "description": "Theseus for Mac: hosts the Theseus engine (Remote Control, checks, briefings) with one set of macOS permissions.",
   "scripts": {
