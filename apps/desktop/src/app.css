@@ -59,3 +59,21 @@
 .segmented button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .md-editor { width: 100%; height: calc(100vh - 130px); padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: inherit; font: 12.5px/1.6 ui-monospace, Menlo, monospace; resize: none; box-shadow: var(--shadow); user-select: text; -webkit-user-select: text; }
 .column .block-head { padding-bottom: 6px; }
+
+/* The impact view */
+.impact-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.impact-focus { grid-column: 1 / -1; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.impact-hint { padding: 0 14px 8px 38px; }
+.impact-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 3px; }
+.impact { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.impact button { height: 20px; padding: 0 7px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.impact button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.impact.suggested button[aria-pressed='true'] { font-weight: 400; font-style: italic; }
+.impact-meta { display: inline-flex; gap: 8px; align-items: center; }
+.chip-impact { padding: 0 6px; border-radius: 9px; border: 1px dashed var(--border); line-height: 15px; }
+.move-to { flex: none; height: 22px; max-width: 86px; font: inherit; font-size: 11px; color: var(--muted); background: var(--field); border: 1px solid var(--border); border-radius: 6px; }
+.impact-next { display: flex; align-items: center; gap: 8px; padding: 7px 10px 8px 32px; border-top: 1px dashed var(--border); background: var(--accent-soft); }
+.impact-more { padding: 6px 14px 8px 32px; border-top: 1px solid var(--border); }
+.impact-hidden { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.btn.tiny { height: 22px; padding: 0 8px; font-size: 11px; }
+.impact-row .task-title { user-select: none; -webkit-user-select: none; cursor: inherit; }

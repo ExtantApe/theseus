@@ -78,6 +78,10 @@ export type ListActions = ReturnType<typeof useListActions>
 function ChipView({ c }: { c: Chip }) {
   const icon: Partial<Record<Chip['kind'], IconName>> = { due: 'clock', reminder: 'bell', repeat: 'repeat', skylight: 'house', link: 'link', done: 'check' }
   const label: Partial<Record<Chip['kind'], string>> = { reminder: 'Has a reminder', skylight: 'On Skylight' }
+  if (c.kind === 'impact') {
+    const mine = c.text.endsWith('*')
+    return <span className="chip chip-impact" title={mine ? 'Your impact rating' : 'Impact suggested by Claude'}>{c.text.replace('*', '')} impact</span>
+  }
   const name = icon[c.kind]
   return (
     <span className={`chip chip-${c.kind}`} title={label[c.kind]}>
