@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.4
+- **A normal Mac menu bar while the window is open.** Theseus lives in the menu bar, and until now its window had no menus, so the only way to quit was the menu bar icon. Opening the window now gives Theseus a Dock icon and the usual menus: Theseus (About, Settings…, Hide, Quit with Cmd-Q), Edit and Window. Settings… opens Setup. Closing the window puts Theseus back in the menu bar only. Quit from either place stops Remote Control and keeps Theseus closed until you open it again. Tested on a debug build with an empty workspace: the menus appear, Close Window returns it to the menu bar, and Quit exits and leaves the quit flag. Not tested: Settings… switching to Setup on screen, and Open Theseus from the menu bar icon (the same code path as the first-launch window, which was tested).
+
 ## 0.6.3
 - **Theseus can run on the Claude Code login you choose.** If this Mac has more than one login, set `"claude_config_dir"` in `config.json` (for example `"~/.claude-work"`). Scheduled runs, checks, Remote Control, the iMessage channel and the `theseus` command then all use it. Setup shows which login is in use. Connectors added to one login aren't on another, so add the ones Theseus uses there too.
 

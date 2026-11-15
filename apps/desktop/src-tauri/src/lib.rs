@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{AboutMetadata, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
@@ -932,6 +932,111 @@ fn settle_window(app: &AppHandle) {
     let _ = app.emit("commit-now", ());
 }
 
+// ---------- menu bar (D211) ----------
+
+/// One entry in the app's menu bar. Kept as data so a test can check the menu without starting the app.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MenuEntry {
+    About,
+    Item { id: &'static str, title: &'static str, accelerator: Option<&'static str> },
+    Separator,
+    Services,
+    Hide,
+    HideOthers,
+    ShowAll,
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+    Minimize,
+    Zoom,
+    CloseWindow,
+}
+
+/// The standard Mac menu bar (owner, D211, 2026-11-15): every Mac app has an app menu with Quit, plus Edit and Window.
+/// Quit and Settings use Theseus's own handlers, so Quit stops Remote Control and tells the watchdog it was on purpose.
+fn menu_bar_spec() -> Vec<(&'static str, Vec<MenuEntry>)> {
+    use MenuEntry::*;
+    vec![
+        (
+            "Theseus",
+            vec![
+                About,
+                Separator,
+                Item { id: "app_settings", title: "Settings…", accelerator: Some("CmdOrCtrl+,") },
+                Separator,
+                Services,
+                Separator,
+                Hide,
+                HideOthers,
+                ShowAll,
+                Separator,
+                Item { id: "app_quit", title: "Quit Theseus", accelerator: Some("CmdOrCtrl+Q") },
+            ],
+        ),
+        ("Edit", vec![Undo, Redo, Separator, Cut, Copy, Paste, SelectAll]),
+        ("Window", vec![Minimize, Zoom, Separator, CloseWindow]),
+    ]
+}
+
+fn build_menu_bar(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+    for (title, entries) in menu_bar_spec() {
+        let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
+        for e in entries {
+            items.push(match e {
+                MenuEntry::About => Box::new(PredefinedMenuItem::about(
+                    app,
+                    Some("About Theseus"),
+                    Some(AboutMetadata { version: Some(app.package_info().version.to_string()), ..Default::default() }),
+                )?),
+                MenuEntry::Item { id, title, accelerator } => Box::new(MenuItem::with_id(app, id, title, true, accelerator)?),
+                MenuEntry::Separator => Box::new(PredefinedMenuItem::separator(app)?),
+                MenuEntry::Services => Box::new(PredefinedMenuItem::services(app, None)?),
+                MenuEntry::Hide => Box::new(PredefinedMenuItem::hide(app, Some("Hide Theseus"))?),
+                MenuEntry::HideOthers => Box::new(PredefinedMenuItem::hide_others(app, None)?),
+                MenuEntry::ShowAll => Box::new(PredefinedMenuItem::show_all(app, None)?),
+                MenuEntry::Undo => Box::new(PredefinedMenuItem::undo(app, None)?),
+                MenuEntry::Redo => Box::new(PredefinedMenuItem::redo(app, None)?),
+                MenuEntry::Cut => Box::new(PredefinedMenuItem::cut(app, None)?),
+                MenuEntry::Copy => Box::new(PredefinedMenuItem::copy(app, None)?),
+                MenuEntry::Paste => Box::new(PredefinedMenuItem::paste(app, None)?),
+                MenuEntry::SelectAll => Box::new(PredefinedMenuItem::select_all(app, None)?),
+                MenuEntry::Minimize => Box::new(PredefinedMenuItem::minimize(app, None)?),
+                MenuEntry::Zoom => Box::new(PredefinedMenuItem::maximize(app, Some("Zoom"))?),
+                MenuEntry::CloseWindow => Box::new(PredefinedMenuItem::close_window(app, None)?),
+            });
+        }
+        let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items.iter().map(|b| b.as_ref()).collect();
+        menu.append(&Submenu::with_items(app, title, true, &refs)?)?;
+    }
+    Ok(menu)
+}
+
+/// Theseus lives in the menu bar. While its window is open it's a regular app, with a Dock icon and the menu bar
+/// above, so Quit and Cmd-Q are there like in any Mac app (D211). Closing the window puts it back in the menu bar.
+fn show_main(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// Quit on purpose: finish what the window holds, stop Remote Control, and leave the flag so the watchdog doesn't
+/// start Theseus again.
+fn quit_theseus(app: &AppHandle, s: &S) {
+    let _ = fs::write(quit_flag(), "");
+    settle_window(app);
+    thread::sleep(Duration::from_millis(600));
+    s.quitting.store(true, Ordering::SeqCst);
+    stop_remote(s);
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let shared: S = Arc::new(Shared {
@@ -955,6 +1060,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status, read_today, read_master, write_master, save_conflict, publish_master, run_now, set_paused, recent_runs, read_run, schedule, thread_notes, read_thread_note, read_commands, permissions, request_permission, open_privacy, take_over, hand_back
         ])
+        .menu(build_menu_bar)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "app_quit" => {
+                let s = app.state::<S>().inner().clone();
+                quit_theseus(app, &s);
+            }
+            "app_settings" => {
+                show_main(app);
+                let _ = app.emit("open-setup", ());
+            }
+            _ => {}
+        })
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -972,10 +1089,7 @@ pub fn run() {
             let needs_setup = !hosting(&cfg) && cfg["auto_host"].as_bool() != Some(false) && !can_host(&shared);
             if !seen.exists() || needs_setup {
                 let _ = fs::write(&seen, "");
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                show_main(app.handle());
             }
 
             let status_item = MenuItem::with_id(app, "status", "Theseus: starting…", false, None::<&str>)?;
@@ -995,12 +1109,7 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(move |app: &AppHandle, event| match event.id.as_ref() {
-                    "open" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
+                    "open" => show_main(app),
                     "run_status" => {
                         let _ = run_job(&s_menu, "status", "started from the menu bar");
                     }
@@ -1009,14 +1118,7 @@ pub fn run() {
                         s_menu.paused.store(now, Ordering::SeqCst);
                         let _ = pause_item.set_text(if now { "Resume checks and Remote Control" } else { "Pause checks and Remote Control" });
                     }
-                    "quit" => {
-                        let _ = fs::write(quit_flag(), "");
-                        settle_window(app);
-                        thread::sleep(Duration::from_millis(600));
-                        s_menu.quitting.store(true, Ordering::SeqCst);
-                        stop_remote(&s_menu);
-                        app.exit(0);
-                    }
+                    "quit" => quit_theseus(app, &s_menu),
                     _ => {}
                 })
                 .build(app)?;
@@ -1056,18 +1158,15 @@ pub fn run() {
                 api.prevent_close();
                 settle_window(window.app_handle());
                 let _ = window.hide();
+                #[cfg(target_os = "macos")]
+                let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
         })
         .build(tauri::generate_context!())
         .expect("error while starting Theseus")
         .run(move |handle, event| match event {
             // Opening the app again (Finder, Spotlight) brings the window back.
-            RunEvent::Reopen { .. } => {
-                if let Some(w) = handle.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
-            }
+            RunEvent::Reopen { .. } => show_main(handle),
             // Any way out, including logging out: don't leave the server behind.
             RunEvent::Exit => {
                 on_exit.quitting.store(true, Ordering::SeqCst);
@@ -1080,6 +1179,44 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_menu_bar_has_the_standard_mac_menus_with_quit() {
+        let spec = menu_bar_spec();
+        let titles: Vec<_> = spec.iter().map(|(t, _)| *t).collect();
+        assert_eq!(titles, ["Theseus", "Edit", "Window"], "app menu first, then Edit and Window");
+        let app_menu = &spec[0].1;
+        assert_eq!(app_menu.first(), Some(&MenuEntry::About));
+        for e in [MenuEntry::Hide, MenuEntry::HideOthers, MenuEntry::ShowAll, MenuEntry::Services] {
+            assert!(app_menu.contains(&e), "app menu is missing {e:?}");
+        }
+        assert!(app_menu.contains(&MenuEntry::Item { id: "app_settings", title: "Settings…", accelerator: Some("CmdOrCtrl+,") }));
+        assert_eq!(
+            app_menu.last(),
+            Some(&MenuEntry::Item { id: "app_quit", title: "Quit Theseus", accelerator: Some("CmdOrCtrl+Q") }),
+            "Quit is last in the app menu, on Cmd-Q"
+        );
+        for e in [MenuEntry::Undo, MenuEntry::Redo, MenuEntry::Cut, MenuEntry::Copy, MenuEntry::Paste, MenuEntry::SelectAll] {
+            assert!(spec[1].1.contains(&e), "Edit is missing {e:?}");
+        }
+        for e in [MenuEntry::Minimize, MenuEntry::Zoom, MenuEntry::CloseWindow] {
+            assert!(spec[2].1.contains(&e), "Window is missing {e:?}");
+        }
+    }
+
+    #[test]
+    fn the_app_menu_ids_never_clash_with_the_tray_menu() {
+        // The tray menu's own "quit" and "open" are handled by the tray. The app menu uses its own ids, so one click
+        // never runs two handlers.
+        let ids: Vec<_> = menu_bar_spec()
+            .into_iter()
+            .flat_map(|(_, es)| es)
+            .filter_map(|e| if let MenuEntry::Item { id, .. } = e { Some(id) } else { None })
+            .collect();
+        for tray in ["status", "open", "run_status", "pause", "quit"] {
+            assert!(!ids.contains(&tray), "{tray} is a tray id");
+        }
+    }
 
     #[test]
     fn a_long_log_is_cut_to_its_end_while_the_writer_keeps_appending() {

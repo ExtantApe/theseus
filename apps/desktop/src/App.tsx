@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ImpactView } from './ImpactUI'
@@ -76,6 +77,11 @@ const noTodo = (l: string) => l.replace(/^☐\s*/, '')
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  // Theseus > Settings… in the menu bar opens Setup (D211).
+  useEffect(() => {
+    const unlisten = listen('open-setup', () => setTab('setup'))
+    return () => { void unlisten.then((f) => f()) }
+  }, [])
   const [status, setStatus] = useState<Status | null>(null)
   const master = useMaster()
   const actions = useListActions(master)
