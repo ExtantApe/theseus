@@ -47,6 +47,15 @@ def claude():
     return found or fail("This needs Claude Code, and I can't find it. Install it from https://claude.com/claude-code")
 
 
+def claude_login(ws):
+    """CLAUDE_CONFIG_DIR from config.json → claude_config_dir, if it's set, so Theseus runs on the Claude Code login you chose."""
+    try:
+        d = (json.loads((ws / "config.json").read_text()).get("claude_config_dir") or "").strip()
+    except (OSError, ValueError, AttributeError):
+        d = ""
+    return {"CLAUDE_CONFIG_DIR": os.path.expanduser(d)} if d else {}
+
+
 def section_title(heading):
     return re.sub(r"^[^\w]+", "", re.sub(r"^##\s*", "", heading)).split(":")[0].strip()
 
@@ -311,7 +320,7 @@ def run_job(ws, job):
 def ask(ws, question):
     prompt = (f'The user asked this at the command line: "{question}". Answer briefly and follow engine/RULES.md. If it\'s something to do or remember, add it to the list. '
               "Never send anything. This run can't ask follow-up questions, so make the sensible choice and say what you did.")
-    sys.exit(subprocess.call([claude(), "-p", prompt, "--output-format", "text"], cwd=ws, stdin=subprocess.DEVNULL, env={**os.environ, "THESEUS_HOME": str(ws)}))
+    sys.exit(subprocess.call([claude(), "-p", prompt, "--output-format", "text"], cwd=ws, stdin=subprocess.DEVNULL, env={**os.environ, "THESEUS_HOME": str(ws), **claude_login(ws)}))
 
 
 def main():
@@ -324,6 +333,7 @@ def main():
         path = claude()
         os.chdir(ws)
         os.environ["THESEUS_HOME"] = str(ws)
+        os.environ.update(claude_login(ws))
         os.execv(path, [path])
     command, rest = args[0], args[1:]
     if command in ("sync", "morning") and not rest:

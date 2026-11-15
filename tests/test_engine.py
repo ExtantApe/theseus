@@ -517,6 +517,18 @@ class Command(unittest.TestCase):
         self.assertIn("quiet sync", self.calls.read_text())
         self.assertFalse((self.ws / "data/.job.lock").exists())
 
+    def test_every_claude_run_uses_the_login_you_chose(self):
+        self.env.pop("CLAUDE_CONFIG_DIR", None)   # the login of whoever runs the tests
+        fake = self.ws / "fake/claude"
+        fake.write_text(f'#!/bin/bash\necho "login=${{CLAUDE_CONFIG_DIR:-default}}" >> "{self.calls}"\necho fake answer\n')
+        self.theseus("sync")
+        self.assertIn("login=default", self.calls.read_text())
+        self.calls.unlink()
+        (self.ws / "config.json").write_text(json.dumps({"scheduler_host": "app", "claude_config_dir": "~/.claude-two"}))
+        self.assertEqual(self.theseus("sync").returncode, 0)
+        self.theseus("what is next")
+        self.assertEqual(self.calls.read_text().split(), [f"login={self.ws}/.claude-two"] * 2)
+
     def test_a_scheduled_job_still_stands_down_for_the_app(self):
         env = {k: v for k, v in self.env.items() if k != "THESEUS_MANUAL"}
         subprocess.run(["/bin/bash", str(self.ws / "engine/scheduled/run-job.sh"), "sync"], env=env, capture_output=True)

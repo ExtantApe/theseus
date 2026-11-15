@@ -61,6 +61,7 @@
     "adapt": true
   },
   "job_time_limit_minutes": 45,
+  "claude_config_dir": "",
   "checks": {
     "enabled": false,
     "every_minutes": 5,

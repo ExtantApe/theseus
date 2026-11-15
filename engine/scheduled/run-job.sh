@@ -10,6 +10,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$PA
 [[ -n "$CLAUDE_BIN" ]] || { echo "Can't find Claude Code." >&2; exit 127; }
 MANUAL="${THESEUS_MANUAL:-}"   # set by the theseus command: you asked for this run, so it goes ahead whoever hosts the schedule
 cd "$WS" || exit 1
+[[ -f engine/scheduled/claude-login.sh ]] && source engine/scheduled/claude-login.sh   # which Claude Code login to use
 # When Theseus.app hosts the schedule, it runs these jobs itself (with the app's permissions); the old launchd jobs stand down.
 if [[ -z "$MANUAL" ]] && /usr/bin/python3 -c 'import json,sys; sys.exit(0 if json.load(open("config.json")).get("scheduler_host")=="app" else 1)' 2>/dev/null; then
   exit 0

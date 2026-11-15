@@ -8,6 +8,7 @@ WS="${THESEUS_HOME:-$HOME/Theseus}"
 CLAUDE_BIN="__CLAUDE_BIN__"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 cd "$WS" || exit 1
+[[ -f engine/scheduled/claude-login.sh ]] && source engine/scheduled/claude-login.sh   # which Claude Code login to use
 mkdir -p logs
 LOG="logs/channel.log"
 note() { echo "$(date '+%F %T') $*" >> "$LOG"; }

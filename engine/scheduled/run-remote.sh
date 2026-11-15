@@ -14,6 +14,7 @@ WS="${THESEUS_HOME:-$HOME/Theseus}"
 CLAUDE_BIN="__CLAUDE_BIN__"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$PATH"
 cd "$WS" || exit 1
+[[ -f engine/scheduled/claude-login.sh ]] && source engine/scheduled/claude-login.sh   # which Claude Code login to use
 mkdir -p logs cache bin
 LOG="logs/remote-control.log"
 note() { echo "$(date '+%F %T') $*" >> "$LOG"; }
@@ -38,6 +39,7 @@ if [[ "$HOST" == "terminal" ]]; then
 #!/bin/bash
 # Opened by the Theseus watchdog. Keep this window open (minimizing is fine): it's how your phone reaches Theseus.
 cd "$WS" || exit 1
+[[ -f engine/scheduled/claude-login.sh ]] && source engine/scheduled/claude-login.sh
 echo \$\$ > "$PIDF"
 printf '\\033]0;Theseus · Remote Control\\007'
 echo "Theseus Remote Control: keep this window open (minimize is fine). If it gets closed, it reopens within a minute. To turn phone access off, set remote_control.enabled to false in config.json."
