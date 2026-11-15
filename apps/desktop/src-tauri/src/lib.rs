@@ -105,6 +105,21 @@ fn find_claude() -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
+/// Which Claude Code login Theseus runs on: config.json → claude_config_dir, if it's set. Otherwise Claude Code's default (~/.claude).
+/// Passed as CLAUDE_CONFIG_DIR to every claude the app starts, so a Mac with two logins runs Theseus on the one you chose.
+fn claude_login(ws: &Path) -> Vec<(&'static str, PathBuf)> {
+    let dir = config(ws)["claude_config_dir"].as_str().map(str::trim).unwrap_or("").to_string();
+    if dir.is_empty() {
+        return vec![];
+    }
+    let path = match dir.strip_prefix("~/") {
+        Some(rest) => home().join(rest),
+        None if dir == "~" => home(),
+        None => PathBuf::from(dir),
+    };
+    vec![("CLAUDE_CONFIG_DIR", path)]
+}
+
 fn config(ws: &Path) -> Value {
     fs::read_to_string(ws.join("config.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
 }
@@ -230,6 +245,7 @@ fn remote_loop(s: S) {
                     .args(["remote-control", "--name", &name])
                     .current_dir(&s.ws)
                     .env("PATH", path_env())
+                    .envs(claude_login(&s.ws))
                     .stdin(Stdio::piped())
                     .stdout(out)
                     .stderr(err)
@@ -379,6 +395,7 @@ fn run_job(s: &S, kind: &str, reason: &str) -> Result<(), String> {
             .current_dir(&s2.ws)
             .env("PATH", path_env())
             .env("THESEUS_HOME", &s2.ws)
+            .envs(claude_login(&s2.ws))
             .stdin(Stdio::null())
             .stdout(out)
             .stderr(err)
@@ -721,7 +738,11 @@ fn permissions(s: State<'_, S>) -> Vec<Permission> {
         "Claude Code",
         "Theseus runs on your own Claude Code account.",
         if s.claude.is_some() { "ok" } else { "denied" },
-        &s.claude.as_ref().map(|p| p.display().to_string()).unwrap_or("Not found. Install Claude Code, then reopen this app.".into()),
+        &match (s.claude.as_ref(), claude_login(&s.ws).first()) {
+            (None, _) => "Not found. Install Claude Code, then reopen this app.".into(),
+            (Some(p), None) => p.display().to_string(),
+            (Some(p), Some((_, dir))) => format!("{} · login: {}", p.display(), dir.display()),
+        },
     ));
     out
 }

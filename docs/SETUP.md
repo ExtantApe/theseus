@@ -112,6 +112,10 @@ bash ~/Theseus/engine/install.sh --schedule
 - **Apps it opens for you:** before each scheduled run, Theseus quietly opens anything listed in `ensure_apps` that isn't running
   (for example `["Claude"]` for the Claude desktop app). Apple Mail is opened automatically if you chose Apple Mail.
   The jobs themselves don't need any app open. They run Claude Code directly.
+- **Which Claude Code login runs Theseus:** Claude Code's default (`~/.claude`) unless you set `"claude_config_dir"`. If you use two logins on this Mac
+  (for example a work account under `CLAUDE_CONFIG_DIR=~/.claude-work`), set `"claude_config_dir": "~/.claude-work"` and every Claude run Theseus starts uses it:
+  scheduled jobs, frequent checks, Remote Control, the iMessage channel and the `theseus` command. Connectors you added to one login aren't on the other, so add them
+  there too. The app's Setup tab shows the login next to Claude Code. Remote Control then shows up under that account in the Claude app.
 - Remove the schedule: `bash ~/Theseus/engine/install.sh --unschedule`
 
 ## 6. Everyday use
