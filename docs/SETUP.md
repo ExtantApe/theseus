@@ -67,9 +67,10 @@ set `family_calendar` in config.json.
 **Fast Skylight sync** (optional): keeps groceries and the chores in `data/chore-map.json` within about 2 minutes of
 Skylight, both ways, without Claude. It never deletes anything and never dates or creates a chore. Rules and limits are at
 the top of `engine/tools/skylight_sync.py`.
-1. Put your Skylight login in the Keychain. The password is typed without showing and never lands in a file:
+1. Put your Skylight login in the Keychain. `security` asks for the password twice without showing it, and it never lands in a file
+   or your shell history:
    ```bash
-   read -rs "pw?Skylight password: " && security add-generic-password -U -s "Theseus Skylight" -a you@example.com -w "$pw"; unset pw
+   security add-generic-password -U -s "Theseus Skylight" -a you@example.com -w
    ```
 2. Check what it would do first. This only reads: `python3 engine/tools/skylight_sync.py run --dry-run`.
 3. Switch it on with `"skylight_sync": "tool"` in config.json, then start it every 2 minutes with the command that
