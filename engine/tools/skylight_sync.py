@@ -7,7 +7,7 @@ skylight_sync.py: keeps chores and groceries in step between Skylight and Remind
   python3 engine/tools/skylight_sync.py install           print the LaunchAgent install command
   python3 engine/tools/skylight_sync.py uninstall         print the command that removes it
 
-It does nothing unless config.json has "skylight_sync": "tool". Then the Claude syncs leave chores and groceries to it
+It does nothing unless config.json has "skylight_sync": "tool", except --dry-run, which only reads and lists. Then the Claude syncs leave chores and groceries to it
 (RULES §3.5 and §3.6).
 
 What it syncs, and how:
@@ -480,7 +480,7 @@ def apply(actions, sk: Skylight | None, list_id: str | None, links: list[dict], 
 
 def run(dry: bool = False) -> int:
     cfg = load(WS / "config.json", {})
-    if cfg.get("skylight_sync") != "tool":
+    if cfg.get("skylight_sync") != "tool" and not dry:  # a dry run works while it's off, so it can be read before switching on
         print('skylight sync is off (config.json "skylight_sync" is not "tool")')
         return 0
     LOCK.parent.mkdir(parents=True, exist_ok=True)
