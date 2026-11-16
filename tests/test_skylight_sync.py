@@ -74,6 +74,18 @@ class GroceriesFirstPass(unittest.TestCase):
         actions, _, _ = plan(CFG, [], [], [rem("r1", "Paper towels", lst="Sam’s Club")])
         self.assertEqual(actions, [("sky_add", "Paper towels", "Sam’s Club")])
 
+    def test_a_new_item_reuses_the_skylight_section_as_spelled_there(self):
+        # The Reminders list says Fry’s (curly); the Skylight list already has Fry's (straight). One section, not two.
+        actions, _, _ = plan(CFG, [], [sky("s1", "Bread", section="Fry's")], [rem("r1", "Eggs", lst="Fry’s")])
+        self.assertIn(("sky_add", "Eggs", "Fry's"), actions)
+        actions, _, _ = plan(CFG, [], [sky("s1", "Bread", section="Fry's"), sky("s2", "Apples", section=None)], [])
+        self.assertIn(("sky_section", "s2", "Fry's"), actions)
+
+    def test_a_mapped_section_still_wins(self):
+        cfg = {**CFG, "grocery_store_sections": {"Fry’s": "Frys Market"}}
+        actions, _, _ = plan(cfg, [], [sky("s1", "Bread", section="Fry's")], [rem("r1", "Eggs", lst="Fry’s")])
+        self.assertIn(("sky_add", "Eggs", "Frys Market"), actions)
+
     def test_matching_respects_the_store(self):
         actions, _, _ = plan(CFG, [], [sky("s1", "Milk", section="Sam’s Club")], [rem("r1", "Milk", lst="Fry’s")])
         self.assertIn(("rem_add", "Sam’s Club", "Milk"), actions)

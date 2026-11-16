@@ -109,8 +109,13 @@ def stores(cfg: dict) -> list[str]:
     return [raw] if isinstance(raw, str) else [s for s in raw if isinstance(s, str) and s]
 
 
-def section_for(cfg: dict, store: str) -> str:
-    return (cfg.get("grocery_store_sections") or {}).get(store, store)
+def section_for(cfg: dict, store: str, existing=()) -> str:
+    """The Skylight section for a store. A section already on the list that matches is reused as it's spelled
+    there, so a Reminders list called Fry’s (curly apostrophe) doesn't add a second Fry's section (2026-11-16)."""
+    mapped = (cfg.get("grocery_store_sections") or {}).get(store)
+    if mapped:
+        return mapped
+    return next((sec for sec in existing if sec and norm(sec) == norm(store)), store)
 
 
 def store_for(cfg: dict, section) -> str | None:
@@ -137,6 +142,7 @@ def plan_groceries(cfg: dict, links: list[dict], sky: list[dict], rems: list[dic
     Returns (actions, links, notes, orphans). Actions are tuples for apply(). New links for items still to be created
     carry "pending": the action index that will create the missing side.
     """
+    existing = sorted({s["section"] for s in sky if s.get("section")})
     shops = stores(cfg)
     first = shops[0]
     by_sky = {s["id"]: s for s in sky}
@@ -194,7 +200,7 @@ def plan_groceries(cfg: dict, links: list[dict], sky: list[dict], rems: list[dic
         # Store: a Skylight section change moves the reminder; a reminder moved to another store sets the section.
         sky_store = store_for(cfg, s.get("section"))
         if r["list"] != ln["store"] and sky_store == ln["store"]:
-            actions.append(("sky_section", s["id"], section_for(cfg, r["list"])))
+            actions.append(("sky_section", s["id"], section_for(cfg, r["list"], existing)))
             new["store"] = r["list"]
         elif sky_store and sky_store != ln["store"] and r["list"] == ln["store"]:
             actions.append(("rem_list", r["id"], sky_store))
@@ -212,7 +218,7 @@ def plan_groceries(cfg: dict, links: list[dict], sky: list[dict], rems: list[dic
         store = store_for(cfg, s.get("section"))
         if store is None:
             store = first
-            actions.append(("sky_section", s["id"], section_for(cfg, first)))
+            actions.append(("sky_section", s["id"], section_for(cfg, first, existing)))
         match = next((r for r in open_rems if r["list"] == store and norm(r["title"]) == norm(s["label"])), None)
         if match:
             open_rems.remove(match)
@@ -225,7 +231,7 @@ def plan_groceries(cfg: dict, links: list[dict], sky: list[dict], rems: list[dic
         linked_sky.add(s["id"])
 
     for r in open_rems:
-        actions.append(("sky_add", r["title"], section_for(cfg, r["list"])))
+        actions.append(("sky_add", r["title"], section_for(cfg, r["list"], existing)))
         kept.append({"sky": None, "rem": r["id"], "store": r["list"], "label": r["title"], "title": r["title"],
                      "sky_done": False, "rem_done": False, "pending": len(actions) - 1})
     return actions, kept, notes, sorted(single)
