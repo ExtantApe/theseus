@@ -3277,8 +3277,9 @@ dependencies = [
 
 [[package]]
 name = "theseus"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "tauri",

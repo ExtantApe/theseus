@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.5
+- **Quit now ends Remote Control too.** Quitting stopped the helper that gives Remote Control a terminal, but not the `claude remote-control` it had started, so that kept running after Theseus closed, and macOS called the app "in use" when you tried to replace it. Quit now stops everything Theseus started: politely first, then by force after three seconds. If anything still holds Quit up, Theseus exits anyway after eight seconds. Tested: a new test with a child that ignores hangups and stop requests, and a debug build with a stand-in for Remote Control, where Quit left no process behind. Not tested: with a real Remote Control session.
+
 ## 0.6.4
 - **A normal Mac menu bar while the window is open.** Theseus lives in the menu bar, and until now its window had no menus, so the only way to quit was the menu bar icon. Opening the window now gives Theseus a Dock icon and the usual menus: Theseus (About, Settings…, Hide, Quit with Cmd-Q), Edit and Window. Settings… opens Setup. Closing the window puts Theseus back in the menu bar only. Quit from either place stops Remote Control and keeps Theseus closed until you open it again. Tested on a debug build with an empty workspace: the menus appear, Close Window returns it to the menu bar, and Quit exits and leaves the quit flag. Not tested: Settings… switching to Setup on screen, and Open Theseus from the menu bar icon (the same code path as the first-launch window, which was tested).
 
