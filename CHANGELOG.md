@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- **A fast Skylight sync for groceries and chores, without Claude** (optional, off until you turn it on). Every 2 minutes it brings the grocery list and the chores linked in `data/chore-map.json` into step with Reminders, both ways: a change on one side is copied, done beats not-done, the newer rename wins when both sides say when, and deletions never cross. It never creates, dates or reschedules a chore. The Skylight login lives in the Keychain. Setup is in docs/SETUP.md §3. Tested: 42 tests for the matching and conflict rules, chores by date and the connection to skylight-mcp (against a stand-in). Not tested: a real Skylight account, which waits on the Keychain login.
+- **`ek add-list --title T`** adds a Reminders list. Tested: it refuses a name that already exists. Not tested: adding one, so as not to change a real Reminders account.
+
 ## 0.6.5
 - **Theseus is in the Dock now,** like LeafJuice, with its menu bar icon as well. Right-click the Dock icon and choose Quit, or use Cmd-Q, Theseus > Quit, or the menu bar icon's Quit. Closing the window keeps Theseus running.
 - **Every Quit really quits.** Before, Quit stopped the helper that gives Remote Control a terminal but not the `claude remote-control` it had started, so that kept running, and macOS called Theseus "in use" when you tried to replace it. Some Quits also didn't leave the note that tells the watchdog to leave Theseus closed, so it came back within a minute. Now every Quit leaves that note and stops everything Theseus started, politely first and by force after three seconds. If anything holds Quit up, Theseus exits anyway after eight seconds. Opening Theseus clears the note, so the watchdog looks after it again.

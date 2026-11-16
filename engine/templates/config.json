@@ -86,6 +86,7 @@
   "grocery_reminders_list": "Groceries",
   "skylight_todo_list": "To Do",
   "skylight_grocery_list": "Grocery",
+  "skylight_sync": "off",
   "skylight_todo_categories": [
     "#Home"
   ],

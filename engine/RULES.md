@@ -199,6 +199,9 @@ A `was:<section>` on a done item is where it came from, for the app's reopen. Le
    Skylight-only. When a mapped chore is added or changed, keep both sides and the map in step.
    **Changing a chore's schedule:** never move a Skylight series' start date, because that erases its past occurrences. End the old series
    (`recurring_until`), create a new one, and update the map.
+   **Fast sync** (`skylight_sync: "tool"`, off by default): `engine/tools/skylight_sync.py` keeps groceries (5) and the chore-map links (6)
+   in step every 2 minutes, without Claude, from a LaunchAgent. While it's on, syncs don't mirror groceries or chores themselves. They run
+   `python3 engine/tools/skylight_sync.py status` and list its alerts under ⚠️ Needs attention, then clear the ones the user has dealt with.
 7. **Title edits**: the most recently modified version wins. If unsure, keep the master version and log it.
 8. **Calendar**: never edit or delete events the user didn't ask about. Create events via `calendar_source`, routed by
    `calendar_routes` (default `default_calendar`). Household events go on `family_calendar` (which shows on Skylight if it's synced there).
