@@ -64,6 +64,19 @@ claude mcp add skylight --scope user -e SKYLIGHT_EMAIL=you@example.com -e SKYLIG
 For family events to show on the frame, turn on Skylight's two-way calendar sync (Skylight app → Sync Calendars) and
 set `family_calendar` in config.json.
 
+**Fast Skylight sync** (optional): keeps groceries and the chores in `data/chore-map.json` within about 2 minutes of
+Skylight, both ways, without Claude. It never deletes anything and never dates or creates a chore. Rules and limits are at
+the top of `engine/tools/skylight_sync.py`.
+1. Put your Skylight login in the Keychain. The password is typed without showing and never lands in a file:
+   ```bash
+   read -rs "pw?Skylight password: " && security add-generic-password -U -s "Theseus Skylight" -a you@example.com -w "$pw"; unset pw
+   ```
+2. Check what it would do first: set `"skylight_sync": "tool"` in config.json, then run
+   `python3 engine/tools/skylight_sync.py run --dry-run` and read the list.
+3. Start it every 2 minutes: run the command that `python3 engine/tools/skylight_sync.py install` prints.
+4. `python3 engine/tools/skylight_sync.py status` shows the last pass and any alert. If Skylight asks you to sign in again, the
+   sync stops until you've done that and run `python3 engine/tools/skylight_sync.py resume`.
+
 **Things 3 migration:** nothing to install. `/migrate` reads Things read-only. Things is never changed.
 
 ## 4. First run

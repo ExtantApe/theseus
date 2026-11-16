@@ -12,6 +12,7 @@
 //   ek add-event --title T --start "2026-11-05 14:00" [--end ...|--minutes 60]
 //                [--cal Name] [--location L] [--notes N] [--allday] [--alert 15]
 //   ek lists
+//   ek add-list --title T                 (a new Reminders list, in the same account as the default list)
 //   ek reminders [--list "A,B"] [--completed-since 2026-10-01] [--all-lists]
 //   ek add-reminder --title T [--list Name] [--due "2026-11-05 09:00"|--due 2026-11-05]
 //                   [--notes N] [--priority high|medium|low|none] [--url U]
@@ -223,6 +224,20 @@ case "calendars":
 case "lists":
     ensure(.reminder)
     emit(store.calendars(for: .reminder).map(calDict))
+
+case "add-list":
+    ensure(.reminder)
+    guard let title = opt("title")?.trimmingCharacters(in: .whitespaces), !title.isEmpty else { fail("--title is required") }
+    if store.calendars(for: .reminder).contains(where: { $0.title.lowercased() == title.lowercased() }) {
+        fail("a list called '\(title)' already exists")
+    }
+    guard let source = store.defaultCalendarForNewReminders()?.source else { fail("no default Reminders account to add the list to") }
+    let list = EKCalendar(for: .reminder, eventStore: store)
+    list.title = title
+    list.source = source
+    do { try store.saveCalendar(list, commit: true) } catch { fail("couldn't add the list: \(error.localizedDescription)") }
+    var made = calDict(list); made["created"] = true
+    emit(made)
 
 case "events":
     ensure(.event)

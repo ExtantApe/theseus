@@ -14,6 +14,7 @@ PY
 swiftc -typecheck engine/tools/ek.swift
 node --test apps/desktop/src/*.test.ts
 PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/test_engine.py
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 tests/test_skylight_sync.py
 bash scripts/check-shared.sh
 cmp <(sed '/^SRC=/d' install.sh) <(sed '/^SRC=/d' engine/install.sh) || { echo "install.sh and engine/install.sh differ"; exit 1; }
 echo "✅ checks passed"
