@@ -196,10 +196,56 @@ fn set<F: FnOnce(&mut Status)>(s: &S, f: F) {
 fn stop_remote(s: &S) {
     if let Ok(mut r) = s.remote.lock() {
         if let Some(mut rem) = r.take() {
-            let _ = rem.child.kill();
-            let _ = rem.child.wait();
+            stop_tree(&mut rem.child);
         }
     }
+}
+
+/// Every process below `root`, children first found, from one `ps` listing.
+fn descendants(root: u32) -> Vec<i32> {
+    let Ok(out) = Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid="]).output() else { return Vec::new() };
+    let pairs: Vec<(i32, i32)> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut it = l.split_whitespace().map(|n| n.parse::<i32>());
+            Some((it.next()?.ok()?, it.next()?.ok()?))
+        })
+        .collect();
+    let mut found = vec![root as i32];
+    let mut i = 0;
+    while i < found.len() {
+        let parent = found[i];
+        found.extend(pairs.iter().filter(|(_, pp)| *pp == parent).map(|(p, _)| *p));
+        i += 1;
+    }
+    found.remove(0);
+    found
+}
+
+/// Stops a child and everything it started. `script` runs Remote Control in a session of its own, so killing
+/// `script` alone left `claude remote-control` running after Quit (owner's report, 2026-11-15). Asks politely
+/// first, then forces whatever is still there after three seconds.
+fn stop_tree(child: &mut Child) {
+    let alive = |pid: i32| unsafe { libc::kill(pid, 0) == 0 };
+    let mut pids = descendants(child.id());
+    pids.push(child.id() as i32);
+    for &pid in &pids {
+        unsafe { libc::kill(pid, libc::SIGTERM) };
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        let _ = child.try_wait();
+        if !pids.iter().any(|&p| alive(p)) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    for &pid in &pids {
+        if alive(pid) {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+    }
+    let _ = child.wait();
 }
 
 fn remote_loop(s: S) {
@@ -1029,6 +1075,11 @@ fn show_main(app: &AppHandle) {
 /// Quit on purpose: finish what the window holds, stop Remote Control, and leave the flag so the watchdog doesn't
 /// start Theseus again.
 fn quit_theseus(app: &AppHandle, s: &S) {
+    // If anything below holds Quit up, Theseus still goes: a Quit that doesn't quit is worse than an unclean one.
+    thread::spawn(|| {
+        thread::sleep(Duration::from_secs(8));
+        std::process::exit(0);
+    });
     let _ = fs::write(quit_flag(), "");
     settle_window(app);
     thread::sleep(Duration::from_millis(600));
@@ -1201,6 +1252,33 @@ mod tests {
         }
         for e in [MenuEntry::Minimize, MenuEntry::Zoom, MenuEntry::CloseWindow] {
             assert!(spec[2].1.contains(&e), "Window is missing {e:?}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stopping_remote_control_leaves_no_process_behind() {
+        // Like Remote Control: `script` starts a child in its own session, and that child ignores hangups.
+        let mut child = Command::new("/usr/bin/script")
+            .args(["-q", "/dev/null", "/bin/bash", "-c", "trap '' HUP TERM; while true; do sleep 1; done"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut below = Vec::new();
+        for _ in 0..50 {
+            below = descendants(child.id());
+            if !below.is_empty() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        assert!(!below.is_empty(), "script started its child");
+        stop_tree(&mut child);
+        thread::sleep(Duration::from_millis(200));
+        for pid in below {
+            assert!(unsafe { libc::kill(pid, 0) } != 0, "process {pid} outlived the stop");
         }
     }
 
