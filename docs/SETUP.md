@@ -71,9 +71,9 @@ the top of `engine/tools/skylight_sync.py`.
    ```bash
    read -rs "pw?Skylight password: " && security add-generic-password -U -s "Theseus Skylight" -a you@example.com -w "$pw"; unset pw
    ```
-2. Check what it would do first: set `"skylight_sync": "tool"` in config.json, then run
-   `python3 engine/tools/skylight_sync.py run --dry-run` and read the list.
-3. Start it every 2 minutes: run the command that `python3 engine/tools/skylight_sync.py install` prints.
+2. Check what it would do first. This only reads: `python3 engine/tools/skylight_sync.py run --dry-run`.
+3. Switch it on with `"skylight_sync": "tool"` in config.json, then start it every 2 minutes with the command that
+   `python3 engine/tools/skylight_sync.py install` prints.
 4. `python3 engine/tools/skylight_sync.py status` shows the last pass and any alert. If Skylight asks you to sign in again, the
    sync stops until you've done that and run `python3 engine/tools/skylight_sync.py resume`.
 
