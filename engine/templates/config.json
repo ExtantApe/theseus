@@ -87,6 +87,10 @@
   "skylight_todo_list": "To Do",
   "skylight_grocery_list": "Grocery",
   "skylight_sync": "off",
+  "eta_from": "",
+  "eta_transport": "car",
+  "eta_buffer_minutes": 10,
+  "eta_daily_lookups": 12,
   "skylight_todo_categories": [
     "#Home"
   ],

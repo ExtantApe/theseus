@@ -21,8 +21,14 @@
 //   ek update     --id ID [--title T] [--due D|--clear-due] [--notes N] [--list L] [--priority P]
 //                 [--recur RRULE|--clear-recur]   (replaces the repeat rule)
 //   ek delete     --id ID --confirm        (reminders only; prefer complete)
+//   ek eta  (--to "address" | --to-geo LAT,LON) (--from "address" | --from-geo LAT,LON)
+//           [--arrive "2026-11-05 14:00"] [--transport car|walk|transit]
+//           Travel time from Apple Maps (no key, no account). With --arrive, Apple predicts traffic for that time.
+//           Addresses go only to Apple. Nothing is stored.
 import Foundation
 import EventKit
+import MapKit
+import CoreLocation
 
 let store = EKEventStore()
 var args = Array(CommandLine.arguments.dropFirst())
@@ -254,6 +260,7 @@ case "events":
         ["id": e.eventIdentifier ?? "", "title": e.title ?? "", "calendar": e.calendar?.title ?? "",
          "start": iso(e.startDate), "end": iso(e.endDate), "all_day": e.isAllDay,
          "location": e.location ?? "", "notes": String((e.notes ?? "").prefix(500)),
+         "geo": nn(e.structuredLocation?.geoLocation.map { ["lat": $0.coordinate.latitude, "lon": $0.coordinate.longitude] }),
          "url": nn(e.url?.absoluteString), "recurring": e.hasRecurrenceRules,
          "attendees": (e.attendees ?? []).count,
          "organizer": nn(e.organizer?.name),
@@ -341,11 +348,55 @@ case "delete":
     do { try store.remove(r, commit: true) } catch { fail("delete failed: \(error.localizedDescription)") }
     emit(["deleted": true, "reminder": snapshot])
 
+case "eta":
+    func waitFor<T>(_ start: (@escaping (T) -> Void) -> Void) -> T {
+        var out: T?
+        start { out = $0 }
+        let deadline = Date().addingTimeInterval(30)
+        while out == nil, Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+        guard let done = out else { fail("Apple Maps didn't answer within 30 seconds") }
+        return done
+    }
+    func place(_ name: String) -> MKMapItem {
+        if let g = opt(name + "-geo") {
+            let parts = g.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            guard parts.count == 2, abs(parts[0]) <= 90, abs(parts[1]) <= 180 else { fail("--\(name)-geo must be LAT,LON") }
+            return MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: parts[0], longitude: parts[1])))
+        }
+        guard let address = opt(name), !address.isEmpty else { fail("--\(name) or --\(name)-geo is required") }
+        let found: ([CLPlacemark]?, Error?) = waitFor { done in CLGeocoder().geocodeAddressString(address) { done(($0, $1)) } }
+        if let mark = found.0?.first { return MKMapItem(placemark: MKPlacemark(placemark: mark)) }
+        // Calendar locations are often names ("Dentist", "Airport"), which the address lookup doesn't know. Search places.
+        let search = MKLocalSearch.Request()
+        search.naturalLanguageQuery = address
+        let hits: (MKLocalSearch.Response?, Error?) = waitFor { done in MKLocalSearch(request: search).start { done(($0, $1)) } }
+        guard let item = hits.0?.mapItems.first else { fail("Apple Maps couldn't find '\(address)'") }
+        return item
+    }
+    let request = MKDirections.Request()
+    request.source = place("from")
+    request.destination = place("to")
+    switch opt("transport") ?? "car" {
+    case "car": request.transportType = .automobile
+    case "walk": request.transportType = .walking
+    case "transit": request.transportType = .transit
+    default: fail("--transport must be car, walk or transit")
+    }
+    if let a = opt("arrive") {
+        guard let (d, _) = parseDate(a) else { fail("can't read --arrive '\(a)'") }
+        request.arrivalDate = d
+    }
+    let answer: (MKDirections.ETAResponse?, Error?) = waitFor { done in MKDirections(request: request).calculateETA { done(($0, $1)) } }
+    guard let eta = answer.0 else { fail("no route: \(answer.1?.localizedDescription ?? "unknown")") }
+    emit(["seconds": Int(eta.expectedTravelTime.rounded()), "minutes": Int((eta.expectedTravelTime / 60).rounded()),
+          "meters": Int(eta.distance.rounded()), "depart": iso(eta.expectedDepartureDate), "arrive": iso(eta.expectedArrivalDate),
+          "transport": opt("transport") ?? "car"])
+
 default:
     print("""
     ek — Calendar & Reminders bridge. Commands:
       access | calendars | events | add-event | lists | reminders | add-reminder |
-      complete | uncomplete | update | delete
+      complete | uncomplete | update | delete | add-list | eta
     See the header of tools/ek.swift for options.
     """)
 }

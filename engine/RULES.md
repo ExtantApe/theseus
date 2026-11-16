@@ -322,7 +322,10 @@ by scripts, so the note uses typed ☐ characters. Tell the user once: "change �
 4. Add a **🌙 Tomorrow** section to the Today note, short enough to read in 30 seconds:
    ```
    ## 🌙 Tomorrow · Wed Nov 4
-   📅 every event in time order (time · title · where), first one bolded; flag early starts, back-to-backs, travel time, free blocks ≥ 60 min
+   📅 every event in time order (time · title · where), first one bolded; flag early starts, back-to-backs, travel time, free blocks ≥ 60 min.
+   For travel time, run `python3 engine/tools/eta.py day --date <tomorrow>` and show its "Leave by" line under each event. Use only
+   the times it gives (from Apple Maps, with traffic predicted for the arrival time); never estimate one. If it says it needs
+   `eta_from` or hit its limit, say so once.
    🔥 Top 3 · ⏰ Due · 🧹 Chores · ⏰ Alarms (§7c, flag mismatches)
    💬 Still waiting: texts, email, Slack (count + top 3)
    🎒 Prep tonight (only if needed) · ❓ Needs you
