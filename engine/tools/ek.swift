@@ -25,7 +25,11 @@
 //           [--arrive "2026-11-05 14:00"] [--transport car|walk|transit]
 //           Travel time from Apple Maps (no key, no account). With --arrive, Apple predicts traffic for that time.
 //           Addresses go only to Apple. Nothing is stored.
+//   ek me-address [--label home|work]
+//           The address on your own Contacts card (the "me" card), for leave-by times. Read only; nothing is stored.
+//           Prints {"found": false, "reason": ...} when there's no me card or no address with that label.
 import Foundation
+import Contacts
 import EventKit
 import MapKit
 import CoreLocation
@@ -392,11 +396,33 @@ case "eta":
           "meters": Int(eta.distance.rounded()), "depart": iso(eta.expectedDepartureDate), "arrive": iso(eta.expectedArrivalDate),
           "transport": opt("transport") ?? "car"])
 
+case "me-address":
+    let wanted = (opt("label") ?? "home").lowercased()
+    let contacts = CNContactStore()
+    var granted: Bool?
+    contacts.requestAccess(for: .contacts) { ok, _ in granted = ok }
+    let deadline = Date().addingTimeInterval(30)
+    while granted == nil, Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+    guard granted == true else { emit(["found": false, "reason": "Contacts access isn't allowed"]); exit(0) }
+    let keys = [CNContactPostalAddressesKey as CNKeyDescriptor]
+    guard let me = try? contacts.unifiedMeContactWithKeys(toFetch: keys) else {
+        emit(["found": false, "reason": "no card is set as My Card in Contacts"]); exit(0)
+    }
+    let label: String = wanted == "work" ? CNLabelWork : CNLabelHome
+    guard let hit = me.postalAddresses.first(where: { $0.label == label }) else {
+        emit(["found": false, "reason": "your Contacts card has no \(wanted) address"]); exit(0)
+    }
+    let a = hit.value
+    let line = [a.street, a.city, [a.state, a.postalCode].filter { !$0.isEmpty }.joined(separator: " "), a.country]
+        .map { $0.replacingOccurrences(of: "\n", with: ", ").trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: ", ")
+    guard !line.isEmpty else { emit(["found": false, "reason": "the \(wanted) address on your Contacts card is empty"]); exit(0) }
+    emit(["found": true, "address": line, "label": wanted])
+
 default:
     print("""
     ek — Calendar & Reminders bridge. Commands:
       access | calendars | events | add-event | lists | reminders | add-reminder |
-      complete | uncomplete | update | delete | add-list | eta
+      complete | uncomplete | update | delete | add-list | eta | me-address
     See the header of tools/ek.swift for options.
     """)
 }
