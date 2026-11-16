@@ -78,7 +78,9 @@ the top of `engine/tools/skylight_sync.py`.
 4. `python3 engine/tools/skylight_sync.py status` shows the last pass and any alert. If Skylight asks you to sign in again, the
    sync stops until you've done that and run `python3 engine/tools/skylight_sync.py resume`.
 
-**Leave-by times** (optional): set `"eta_from"` in config.json to where your trips start, as an address or `LAT,LON`.
+**Leave-by times** (optional): set `"eta_from"` in config.json to where your trips start: `"contacts:home"` reads the home
+address on your own card in Contacts (My Card) each time and never saves it, or give an address or `LAT,LON`. If your card
+has no home address, the briefing says so and shows none. The first run asks for Contacts access.
 The evening briefing then shows "Leave by" for tomorrow's events that have a place, from Apple Maps travel times with
 traffic predicted for when you need to arrive. No key or account. Your starting point and event places go only to Apple.
 At most 12 lookups a day (`eta_daily_lookups`), plus 10 minutes for parking (`eta_buffer_minutes`). Try it with

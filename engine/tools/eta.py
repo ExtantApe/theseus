@@ -10,7 +10,9 @@ when arriving at the event's start. Apple predicts traffic for that time (tested
 34 minutes arriving at a weekday rush hour and 19 minutes early on a Sunday).
 
 config.json:
-  "eta_from": where trips start, an address or "LAT,LON". Required; without it nothing is looked up.
+  "eta_from": where trips start: "contacts:home" (the home address on your own Contacts card, read fresh each
+              time and never saved), "contacts:work", an address, or "LAT,LON". Required; without it nothing is
+              looked up. If the card has no such address, that's said and nothing is guessed.
   "eta_transport": "car" (default), "walk" or "transit".
   "eta_buffer_minutes": added to the travel time for parking and walking in (default 10).
   "eta_daily_lookups": the most Apple Maps lookups a day (default 12).
@@ -89,11 +91,28 @@ def lookup_args(e: dict, origin: str, transport: str) -> list[str]:
     return args
 
 
+def resolve_origin(setting: str, ask=ek) -> tuple[str, str | None]:
+    """The starting address, and why there isn't one. "contacts:home" reads the owner's own card each time."""
+    m = re.fullmatch(r"contacts:(home|work)", setting.strip().lower())
+    if not m:
+        return setting.strip(), None
+    try:
+        got = ask("me-address", "--label", m.group(1)) or {}
+    except RuntimeError as err:
+        return "", f"Couldn't read your Contacts card for leave-by times: {err}"
+    if got.get("found") and (got.get("address") or "").strip():
+        return got["address"].strip(), None
+    return "", f"No leave-by times: {got.get('reason') or 'no ' + m.group(1) + ' address on your Contacts card'}. Add it to your card in Contacts."
+
+
 def plan(day: dt.date, cfg: dict, now: dt.datetime | None = None, ask=ek) -> dict:
     now = now or dt.datetime.now().astimezone()
-    origin = (cfg.get("eta_from") or "").strip()
-    if not origin:
-        return {"trips": [], "note": 'Set "eta_from" in config.json (an address or LAT,LON) for leave-by times.'}
+    setting = (cfg.get("eta_from") or "").strip()
+    if not setting:
+        return {"trips": [], "note": 'Set "eta_from" in config.json ("contacts:home", an address or LAT,LON) for leave-by times.'}
+    origin, missing = resolve_origin(setting, ask)
+    if missing:
+        return {"trips": [], "note": missing}
     transport = cfg.get("eta_transport") or "car"
     buffer = int(cfg.get("eta_buffer_minutes", 10))
     limit = int(cfg.get("eta_daily_lookups", 12))

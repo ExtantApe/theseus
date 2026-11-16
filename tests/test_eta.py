@@ -23,12 +23,15 @@ def ev(title, hour, location="", minute=0, **extra):
 class Fake:
     """Stands in for bin/ek: returns the events, and a travel time for each lookup."""
 
-    def __init__(self, events, minutes=25, fail=False):
-        self.events, self.minutes, self.fail, self.lookups = events, minutes, fail, []
+    def __init__(self, events, minutes=25, fail=False, me=None):
+        self.events, self.minutes, self.fail, self.lookups, self.me, self.asked_me = events, minutes, fail, [], me, []
 
     def __call__(self, *args):
         if args[0] == "events":
             return self.events
+        if args[0] == "me-address":
+            self.asked_me.append(args)
+            return self.me
         self.lookups.append(args)
         if self.fail:
             raise RuntimeError("Apple Maps couldn't find it")
@@ -121,6 +124,27 @@ class Eta(unittest.TestCase):
         r = self.run_plan(Fake([ev("Dentist", 8, "Made Up Dental", minute=20)], minutes=25))
         self.assertTrue(r["trips"][0]["late"])
         self.assertIn("Leave now", eta.text(r))
+
+    def test_home_from_the_contacts_card(self):
+        fake = Fake([ev("Dentist", 10, "Made Up Dental")], me={"found": True, "address": "1 Made Up St, Somewhere", "label": "home"})
+        r = self.run_plan(fake, cfg={"eta_from": "contacts:home"})
+        self.assertEqual(fake.asked_me[0], ("me-address", "--label", "home"))
+        args = fake.lookups[0]
+        self.assertEqual(args[args.index("--from") + 1], "1 Made Up St, Somewhere")
+        self.assertEqual(len(r["trips"]), 1)
+
+    def test_no_home_address_on_the_card_is_said_not_guessed(self):
+        fake = Fake([ev("Dentist", 10, "Made Up Dental")], me={"found": False, "reason": "your Contacts card has no home address"})
+        r = self.run_plan(fake, cfg={"eta_from": "contacts:home"})
+        self.assertEqual(fake.lookups, [])
+        self.assertEqual(r["trips"], [])
+        self.assertIn("no home address", r["note"])
+        self.assertIn("Add it to your card", r["note"])
+
+    def test_the_home_address_is_never_saved(self):
+        fake = Fake([ev("Dentist", 10, "Made Up Dental")], me={"found": True, "address": "1 Made Up St, Somewhere", "label": "home"})
+        self.run_plan(fake, cfg={"eta_from": "contacts:home"})
+        self.assertNotIn("Made Up St", eta.CACHE.read_text())
 
     def test_the_cache_holds_no_places_or_titles(self):
         self.run_plan(Fake([ev("Dentist", 10, "Made Up Dental")]))
