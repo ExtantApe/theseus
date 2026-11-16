@@ -16,7 +16,5 @@
   <string>Theseus reads your Notes inbox folder and updates your pinned Today and Master List notes.</string>
   <key>NSContactsUsageDescription</key>
   <string>Theseus shows names instead of phone numbers for people who are waiting on you.</string>
-  <key>LSUIElement</key>
-  <true/>
 </dict>
 </plist>

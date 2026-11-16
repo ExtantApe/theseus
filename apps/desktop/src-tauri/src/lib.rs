@@ -1061,31 +1061,53 @@ fn build_menu_bar(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Ok(menu)
 }
 
-/// Theseus lives in the menu bar. While its window is open it's a regular app, with a Dock icon and the menu bar
-/// above, so Quit and Cmd-Q are there like in any Mac app (D211). Closing the window puts it back in the menu bar.
+/// Theseus is a regular Mac app with a Dock icon, a menu bar and its menu bar icon (owner, 2026-11-15: "adding it so
+/// theseus shows as an app in the mac app bar at the bottom and allowing it to be quit from the context menu like LJ").
 fn show_main(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.set_focus();
     }
 }
 
-/// Quit on purpose: finish what the window holds, stop Remote Control, and leave the flag so the watchdog doesn't
-/// start Theseus again.
+/// Set once a Quit has begun, so the exit it ends with isn't taken for a new Quit.
+static QUIT_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// The first step of every Quit: leave the marker that tells the watchdog not to start Theseus again. Returns false
+/// when a Quit is already under way.
+fn begin_quit(marker: &Path) -> bool {
+    if QUIT_STARTED.swap(true, Ordering::SeqCst) {
+        return false;
+    }
+    let _ = fs::write(marker, "");
+    true
+}
+
+/// Opening Theseus undoes a Quit: without the marker, the watchdog looks after it again.
+fn clear_quit_marker(marker: &Path) {
+    let _ = fs::remove_file(marker);
+}
+
+/// Every way out goes through here: the Dock's Quit, Cmd-Q, Theseus > Quit and the menu bar icon's Quit. It finishes
+/// what the window holds, stops Remote Control and everything it started, leaves the marker, and exits. The work runs
+/// off the main thread so the window can save while it waits.
 fn quit_theseus(app: &AppHandle, s: &S) {
+    if !begin_quit(&quit_flag()) {
+        return;
+    }
     // If anything below holds Quit up, Theseus still goes: a Quit that doesn't quit is worse than an unclean one.
     thread::spawn(|| {
         thread::sleep(Duration::from_secs(8));
         std::process::exit(0);
     });
-    let _ = fs::write(quit_flag(), "");
-    settle_window(app);
-    thread::sleep(Duration::from_millis(600));
-    s.quitting.store(true, Ordering::SeqCst);
-    stop_remote(s);
-    app.exit(0);
+    let (app, s) = (app.clone(), s.clone());
+    thread::spawn(move || {
+        settle_window(&app);
+        thread::sleep(Duration::from_millis(600));
+        s.quitting.store(true, Ordering::SeqCst);
+        stop_remote(&s);
+        app.exit(0);
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1124,12 +1146,9 @@ pub fn run() {
             _ => {}
         })
         .setup(move |app| {
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
             // Open on the very first launch, so a new user isn't left with only a menu bar icon.
             // Opening the app undoes "Quit": from here on, the watchdog looks after it again.
-            let _ = fs::remove_file(quit_flag());
+            clear_quit_marker(&quit_flag());
             if hosting(&config(&shared.ws)) {
                 install_watchdog(&shared.ws);
             }
@@ -1204,13 +1223,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the window just hides it; Theseus keeps running in the menu bar.
+            // Closing the window just hides it; Theseus keeps running, in the Dock and the menu bar.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 settle_window(window.app_handle());
                 let _ = window.hide();
-                #[cfg(target_os = "macos")]
-                let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
         })
         .build(tauri::generate_context!())
@@ -1218,8 +1235,16 @@ pub fn run() {
         .run(move |handle, event| match event {
             // Opening the app again (Finder, Spotlight) brings the window back.
             RunEvent::Reopen { .. } => show_main(handle),
-            // Any way out, including logging out: don't leave the server behind.
+            // The Dock's Quit, Cmd-Q, logging out and shutting down all ask to exit here. The first ask becomes a full
+            // Quit; the exit that Quit ends with goes through.
+            RunEvent::ExitRequested { api, .. } if !QUIT_STARTED.load(Ordering::SeqCst) => {
+                api.prevent_exit();
+                quit_theseus(handle, &on_exit);
+            }
+            // Any way out, including logging out: don't leave the server behind. The Dock's Quit comes straight here
+            // without asking first, so this also leaves the marker that keeps the watchdog from reopening Theseus.
             RunEvent::Exit => {
+                begin_quit(&quit_flag());
                 on_exit.quitting.store(true, Ordering::SeqCst);
                 stop_remote(&on_exit);
             }
@@ -1280,6 +1305,28 @@ mod tests {
         for pid in below {
             assert!(unsafe { libc::kill(pid, 0) } != 0, "process {pid} outlived the stop");
         }
+    }
+
+    #[test]
+    fn quit_leaves_the_marker_once_and_opening_clears_it() {
+        let marker = std::env::temp_dir().join(format!("theseus-quit-test-{}", std::process::id()));
+        let _ = fs::remove_file(&marker);
+        assert!(begin_quit(&marker), "the first Quit begins");
+        assert!(marker.exists(), "Quit leaves the marker for the watchdog");
+        assert!(!begin_quit(&marker), "a second Quit while one is under way does nothing");
+        clear_quit_marker(&marker);
+        assert!(!marker.exists(), "opening Theseus clears the marker, so the watchdog guards it again");
+        QUIT_STARTED.store(false, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn theseus_is_a_regular_app_with_a_dock_icon() {
+        // The owner wants Theseus in the Dock, quit from its menu like LeafJuice: no menu-bar-only mode.
+        let plist = include_str!("../Info.plist");
+        assert!(!plist.contains("LSUIElement"), "Info.plist must not hide the Dock icon");
+        let src = include_str!("lib.rs");
+        let accessory = ["ActivationPolicy::", "Accessory"].concat();
+        assert!(!src.contains(&accessory), "the app must not switch to the accessory policy");
     }
 
     #[test]
