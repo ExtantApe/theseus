@@ -348,5 +348,65 @@ class Housekeeping(unittest.TestCase):
         self.assertFalse(ss.WRITE_LOG.exists())
 
 
+class OffSwitchAndDryRun(unittest.TestCase):
+    """The sync does nothing while it's off, and a dry run, which works while it's off, writes nothing anywhere."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="theseus-skylight-test-"))
+        (self.tmp / "data").mkdir()
+        self.saved = {k: getattr(ss, k) for k in ("WS", "LOCK", "STATE", "CHORE_MAP", "keychain_login", "Skylight", "read_sky_groceries", "read_rems", "ek", "write_log", "pass_log")}
+        self.made = []
+        test = self
+
+        class FakeSkylight:
+            def __init__(self, env):
+                test.made.append("skylight")
+                self.calls = []
+
+            def call(self, tool, **kw):
+                if tool != "skylight_list_chores":
+                    raise AssertionError(f"a write reached Skylight: {tool}")
+                return []
+
+            def close(self):
+                pass
+
+        def no_ek(*a):
+            raise AssertionError(f"a write reached Reminders: {a}")
+
+        ss.WS, ss.LOCK = self.tmp, self.tmp / "data" / ".lock"
+        ss.STATE, ss.CHORE_MAP = self.tmp / "data" / "skylight-sync.json", self.tmp / "data" / "chore-map.json"
+        ss.keychain_login, ss.Skylight, ss.ek = (lambda: {}), FakeSkylight, no_ek
+        ss.read_sky_groceries = lambda sk, cfg: ("made-up-list", [sky("s1", "Milk")])
+        ss.read_rems = lambda lists, days=30: []
+        ss.write_log = lambda *a, **k: (_ for _ in ()).throw(AssertionError("a change was logged"))
+        ss.pass_log = lambda line: None
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(ss, k, v)
+        shutil.rmtree(self.tmp)
+
+    def config(self, on):
+        (self.tmp / "config.json").write_text(json.dumps({**CFG, **({"skylight_sync": "tool"} if on else {})}))
+
+    def test_while_off_a_real_pass_reads_and_writes_nothing(self):
+        self.config(on=False)
+        self.assertEqual(ss.run(dry=False), 0)
+        self.assertEqual(self.made, [], "Skylight wasn't even opened")
+        self.assertFalse(ss.STATE.exists())
+
+    def test_a_dry_run_works_while_off_and_writes_nothing(self):
+        self.config(on=False)
+        from contextlib import redirect_stdout
+        import io
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(ss.run(dry=True), 0)
+        self.assertEqual(self.made, ["skylight"], "it read Skylight")
+        self.assertIn("rem_add", out.getvalue(), "and listed what it would do")
+        self.assertFalse(ss.STATE.exists(), "no state saved")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,20 @@
 
 How the tests line up with what Theseus promises. Redo it after every feature or fix, and at least every 14 days while the repo has commits.
 
+## 2026-11-22 · Skylight sync, leave-by times, Quit and the Dock
+
+| Promise | Proved by |
+| --- | --- |
+| The Skylight sync matches, links, copies done and renames, moves sections, and never deletes (D212) | `tests/test_skylight_sync.py`: the grocery, chore and client classes, including "no plan ever deletes" |
+| New grocery items reuse the Skylight section's own spelling | `test_a_new_item_reuses_the_skylight_section_as_spelled_there` |
+| While the sync is off it does nothing, and a dry run works then and writes nothing | **Added:** `OffSwitchAndDryRun`: a real pass never opens Skylight or saves state; a dry run reads, lists what it would do, and reaches neither Skylight's writes, Reminders, the change log nor the state file |
+| Leave-by times come from Apple Maps travel times, starting from the home address on the owner's card | `tests/test_eta.py` |
+| Quit stops the whole process tree Remote Control started, TERM then KILL, with an 8-second backstop | the macOS test in `src-tauri` where the child ignores HUP and TERM |
+| Every way out leaves the watchdog marker; Theseus stays in the Dock | the marker and Dock unit tests in `src-tauri/src/lib.rs` |
+| The window has a standard menu bar with Quit | the cargo tests for the menu contents and ids |
+
+Gaps skipped: clicking the menu bar icon's Quit, and a real Remote Control session, need the owner's screen and login (both noted in their commits). A dry run still creates the sync's lock file, and logs a line if it fails; neither holds user data, so that's left as is. Release-only commits (0.6.2) change version numbers, which the version check already covers.
+
 ## 2026-11-09 · the Impact view
 
 | Promise | Proved by |
