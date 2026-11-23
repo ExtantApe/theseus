@@ -57,7 +57,7 @@
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
 .segmented button { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: inherit; }
 .segmented button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
-.md-editor { width: 100%; height: calc(100vh - 130px); padding: 14px 16px; border: 1px solid var(--control); border-radius: 10px; background: var(--panel); color: inherit; font: 12.5px/1.6 ui-monospace, Menlo, monospace; resize: none; box-shadow: var(--shadow); user-select: text; -webkit-user-select: text; }
+.md-editor { width: 100%; height: calc(100vh - 130px); padding: 14px 16px; border: 1px solid var(--control); border-radius: 10px; background: var(--panel); color: inherit; font: 12.5px/1.6 ui-monospace, Menlo, monospace; resize: none; user-select: text; -webkit-user-select: text; }
 .column .block-head { padding-bottom: 6px; }
 
 /* The impact view */
