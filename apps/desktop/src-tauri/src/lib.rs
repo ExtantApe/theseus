@@ -20,6 +20,8 @@ use tauri::menu::{AboutMetadata, IsMenuItem, Menu, MenuItem, PredefinedMenuItem,
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 
+mod id_move;
+
 const PY: &str = "/usr/bin/python3";
 const DEFAULT_JOB_MINUTES: u64 = 45;
 
@@ -1122,6 +1124,11 @@ pub fn run() {
         master: Mutex::new(()),
     });
     let _ = fs::create_dir_all(shared.ws.join("logs"));
+    // Before the window exists, so the web view finds its saved settings under the new identifier.
+    let moved = id_move::migrate(&home(), id_move::OLD_ID, id_move::NEW_ID).summary();
+    if !moved.is_empty() {
+        log(&shared.ws, "app.log", &moved);
+    }
     set(&shared, |st| {
         st.workspace = shared.ws.display().to_string();
         st.claude = shared.claude.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "not found".into());

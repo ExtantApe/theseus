@@ -108,6 +108,10 @@ Requires macOS 14 or later, on Apple silicon or Intel, and Apple's command line 
 
 Do the install above first, since the app runs that copy of Theseus. Then open it, allow what's listed on its Setup tab, and click **Run from this app…** there. After that it opens at login and reopens after a crash.
 
+### Updating from 0.6.x
+
+The Mac app has a new identifier, `com.extantape.theseus`, so macOS treats it as a new app and its permissions start empty. After you update, open **System Settings → Privacy & Security** and add Theseus again under **Full Disk Access**, **Calendars**, **Reminders**, **Automation** (Notes) and **Contacts**. The Setup tab lists what's still missing. The old Theseus entries can be removed with the minus button. Your lists, config and logins are in your Theseus folder and don't move.
+
 Plugin install (inside Claude Code):
 ```
 /plugin marketplace add ExtantApe/theseus

@@ -7,3 +7,5 @@ io.github.mgilardi.theseus
 github.com/ExtantApe/ariadne
 getty@tty1.service
 Copyright (c) 2026 EXTANT APE
+com.extantape.theseus
+com.extantape.<name>
